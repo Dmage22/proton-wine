@@ -2130,6 +2130,25 @@ static NTSTATUS set_protection( struct file_view *view, void *base, SIZE_T size,
     }
 
     if (!set_vprot( view, base, size, vprot | VPROT_COMMITTED )) return STATUS_ACCESS_DENIED;
+
+    /* If the ARM64EC code map exists and the new protection includes execute
+     * permission, register the range so FEX/the emulator knows this region
+     * contains x86-64 code that needs translation. This handles the case where
+     * applications (e.g. Blizzard's game loaders) dynamically unpack code into
+     * memory and then mark it executable via VirtualProtect, without using the
+     * MEM_EXTENDED_PARAMETER_EC_CODE attribute. */
+    if (arm64ec_view && (vprot & VPROT_EXEC))
+    {
+        commit_arm64ec_map( view );
+        set_arm64ec_range( base, size );
+    }
+    /* If protection is being changed to remove execute permission, clear the
+     * range from the code map. */
+    else if (arm64ec_view && !(vprot & VPROT_EXEC) && (view->protect & VPROT_ARM64EC))
+    {
+        clear_arm64ec_range( base, size );
+    }
+
     return STATUS_SUCCESS;
 }
 
@@ -3769,6 +3788,16 @@ static unsigned int virtual_map_section( HANDLE handle, PVOID *addr_ptr, ULONG_P
 
     if (NT_SUCCESS(res))
     {
+        /* If the ARM64EC code map exists and this section is mapped with
+         * execute permissions, register the range as containing x86-64 code.
+         * This covers dynamically mapped executable sections (e.g. Blizzard
+         * loader .eid sections unpacked via NtMapViewOfSection). */
+        if (arm64ec_view && (vprot & VPROT_EXEC))
+        {
+            commit_arm64ec_map( view );
+            set_arm64ec_range( view->base, size );
+        }
+
         *addr_ptr = view->base;
         *size_ptr = size;
         VIRTUAL_DEBUG_DUMP_VIEW( view );
