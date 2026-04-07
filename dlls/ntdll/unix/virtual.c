@@ -2138,8 +2138,14 @@ static NTSTATUS set_protection( struct file_view *view, void *base, SIZE_T size,
      * contains x86-64 code that needs translation. This handles the case where
      * applications (e.g. Blizzard's game loaders) dynamically unpack code into
      * memory and then mark it executable via VirtualProtect, without using the
-     * MEM_EXTENDED_PARAMETER_EC_CODE attribute. */
-    if (arm64ec_view && (vprot & VPROT_EXEC))
+     * MEM_EXTENDED_PARAMETER_EC_CODE attribute.
+     *
+     * Only apply to non-image, non-native views — PE images (SEC_IMAGE) and
+     * native ARM64 views (VPROT_NATIVE) have their own code map handling
+     * through the PE loader. Marking native ARM64 code as x86 would cause
+     * FEX to incorrectly try to translate it. */
+    if (arm64ec_view && (vprot & VPROT_EXEC) &&
+        !(view->protect & (SEC_IMAGE | VPROT_NATIVE)))
     {
         commit_arm64ec_map( view );
         set_arm64ec_range( base, size );
