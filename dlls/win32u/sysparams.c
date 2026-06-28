@@ -6635,7 +6635,7 @@ BOOL WINAPI NtUserSystemParametersInfo( UINT action, UINT val, void *ptr, UINT w
         }
         break;
     }
-    WINE_SPI_FIXME(SPI_SETFILTERKEYS);
+    WINE_SPI_WARN(SPI_SETFILTERKEYS);
 
     case SPI_GETTOGGLEKEYS:
     {
@@ -6691,7 +6691,7 @@ BOOL WINAPI NtUserSystemParametersInfo( UINT action, UINT val, void *ptr, UINT w
         break;
     }
 
-    WINE_SPI_FIXME(SPI_SETSTICKYKEYS);
+    WINE_SPI_WARN(SPI_SETSTICKYKEYS);
 
     case SPI_GETACCESSTIMEOUT:
     {
