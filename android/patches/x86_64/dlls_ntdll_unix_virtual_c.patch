@@ -1,5 +1,5 @@
 diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
-index 963ebd2..7a70299 100644
+index 963ebd2..8740a61 100644
 --- a/dlls/ntdll/unix/virtual.c
 +++ b/dlls/ntdll/unix/virtual.c
 @@ -293,9 +293,15 @@ static void *address_space_start = (void *)0x110000; /* keep DOS area clear */
@@ -37,3 +37,4 @@ index 963ebd2..7a70299 100644
  }
  
  static void kernel_writewatch_reset( void *start, SIZE_T len )
+

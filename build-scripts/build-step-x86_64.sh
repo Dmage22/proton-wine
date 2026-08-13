@@ -46,6 +46,17 @@ export FFMPEG_LIBS="-L$deps/lib -lavutil -lavcodec -lavformat"
 
 for arg in "$@"
 do
+  if [ "$arg" == "--enable-16kb-pages" ];
+  then
+    echo "Enabling 16KB page size support..."
+    export TARGET=x86_64-linux-android35
+    export C_OPTS="$C_OPTS -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES"
+    export CFLAGS="$C_OPTS"
+    export CXXFLAGS="$C_OPTS"
+    export LDFLAGS="$LDFLAGS -Wl,-z,max-page-size=16384"
+    echo "16KB page size support enabled"
+  fi
+
   if [ "$arg" == "--build-sysvshm" ];
   then
     # Build android_sysvshm library
@@ -123,11 +134,8 @@ do
       --with-vulkan \
       --without-wayland \
       --without-xcomposite \
-      --without-xcursor \
       --without-xfixes \
       --without-xinerama \
-      --without-xinput \
-      --without-xinput2 \
       --without-xrandr \
       --without-xrender \
       --without-xshape \
@@ -138,63 +146,70 @@ do
 
     PATCHES=(
       # android network patch
-      "android_network.patch"
-      "dlls_nsiproxy_sys_ip_c.patch"
+      "common/dlls_dnsapi_libresolv_c.patch"
+      "common/dlls_dnsapi_record_c.patch"
+      "common/dlls_nsiproxy_sys_ip_c.patch"
+      "common/dlls_nsiproxy_sys_ndis_c.patch"
+      "common/dlls_nsiproxy_sys_nsi_common_h.patch"
+      "common/dlls_user32_makefile_in.patch"
+      "common/dlls_ws2_32_socket_c.patch"
+      "common/server_token_c.patch"
+      "common/server_unicode_c.patch"
 
       # midi support
-      "midi_support.patch"
+      "common/midi_support.patch"
 
       # sdl patch
-      "dlls_winebus_sys_bus_sdl_c.patch"
+      "common/dlls_winebus_sys_bus_sdl_c.patch"
 
       # shm_utils
-      "dlls_ntdll_unix_esync_c.patch"
-      "dlls_ntdll_unix_fsync_c.patch"
-      "server_esync_c.patch"
-      "server_fsync_c.patch"
+      "common/dlls_ntdll_unix_esync_c.patch"
+      "common/dlls_ntdll_unix_fsync_c.patch"
+      "common/server_esync_c.patch"
+      "common/server_fsync_c.patch"
 
       # winex11
-      "dlls_winex11_drv_x11drv_h.patch"
-      "dlls_winex11_drv_bitblt_c.patch"
-      "dlls_winex11_drv_desktop_c.patch"
-      "dlls_winex11_drv_mouse_c.patch"
-      "dlls_winex11_drv_window_c.patch"
-      "dlls_winex11_drv_x11drv_main_c.patch"
+      "common/dlls_winex11_drv_bitblt_c.patch"
+      "common/dlls_winex11_drv_desktop_c.patch"
+      "common/dlls_winex11_drv_keyboard_c.patch"
+      "common/dlls_winex11_drv_mouse_c.patch"
+      "common/dlls_winex11_drv_opengl_c.patch"
+      "common/dlls_winex11_drv_window_c.patch"
+      "common/dlls_winex11_drv_x11drv_h.patch"
+      "common/dlls_winex11_drv_x11drv_main_c.patch"
 
       # address space patches
-      "dlls_ntdll_unix_virtual_c.patch"
-      "loader_preloader_c.patch"
+      "common/loader_preloader_c.patch"
+      "x86_64/dlls_ntdll_unix_virtual_c.patch"
 
       # syscall Patches
-      "dlls_ntdll_unix_signal_x86_64_c.patch"
+      "x86_64/dlls_ntdll_unix_signal_x86_64_c.patch"
 
       # pulse Patches
-      "dlls_winepulse_drv_pulse_c.patch"
+      "common/dlls_winepulse_drv_pulse_c.patch"
 
       # desktop patches
-      "programs_explorer_desktop_c.patch"
+      "common/programs_explorer_desktop_c.patch"
 
       # path patches
-      "dlls_ntdll_unix_server_c.patch"
+      "common/dlls_ntdll_unix_server_c.patch"
 
       # winlator patches
-      "dlls_amd_ags_x64_unixlib_c.patch"
-      "dlls_winex11_drv_opengl_c.patch"
+      "common/dlls_amd_ags_x64_unixlib_c.patch"
 
       # shortcut patch
-      "programs_winemenubuilder_winemenubuilder_c.patch"
+      "common/programs_winemenubuilder_winemenubuilder_c.patch"
 
-      # advapi32 patches
-      "dlls_advapi32_advapi_c.patch"
+      # xuser patches
+      "common/dlls_advapi32_advapi_c.patch"
 
       # browser patches
-      "programs_winebrowser_makefile_in.patch"
-      "programs_winebrowser_main_c.patch"
+      "common/programs_winebrowser_makefile_in.patch"
+      "common/programs_winebrowser_main_c.patch"
 
       # clipboard patches
-      "dlls_user32_makefile_in.patch"
-      "dlls_user32_clipboard_c.patch"
-      "dlls_win32u_clipboard_c.patch"
+      "common/dlls_user32_clipboard_c.patch"
+      "common/dlls_win32u_clipboard_c.patch"
     )
 
     for patch in "${PATCHES[@]}"; do
