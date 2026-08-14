@@ -3831,6 +3831,18 @@ static unsigned int virtual_map_section( HANDLE handle, PVOID *addr_ptr, ULONG_P
 
     if (NT_SUCCESS(res))
     {
+        /* If the ARM64EC code map exists and this section is mapped with
+         * execute permissions, register the range as containing x86-64 code.
+         * This covers dynamically mapped executable sections (e.g. Blizzard
+         * loader .eid sections unpacked via NtMapViewOfSection).
+         * Note: image mappings are handled separately via virtual_map_image
+         * and return early above, so this only applies to non-image sections. */
+        if (arm64ec_view && (vprot & VPROT_EXEC))
+        {
+            commit_arm64ec_map( view );
+            set_arm64ec_range( view->base, size );
+        }
+
         *addr_ptr = view->base;
         *size_ptr = size;
         VIRTUAL_DEBUG_DUMP_VIEW( view );
@@ -5532,6 +5544,19 @@ static NTSTATUS allocate_virtual_memory( void **ret, SIZE_T *size_ptr, ULONG typ
         set_arm64ec_range( base, size );
     }
 
+    /* If the ARM64EC code map exists and this allocation has execute permission
+     * but was not explicitly tagged with EC_CODE, register it anyway.
+     * This handles applications (e.g. Blizzard's game loaders) that dynamically
+     * allocate executable memory via VirtualAlloc without using the
+     * MEM_EXTENDED_PARAMETER_EC_CODE attribute. Only apply to valloc views
+     * (not image or file mappings) to avoid marking Wine/FEX internal pages. */
+    if (!status && arm64ec_view && !(attributes & MEM_EXTENDED_PARAMETER_EC_CODE) &&
+        (vprot & VPROT_EXEC) && is_view_valloc( view ))
+    {
+        commit_arm64ec_map( view );
+        set_arm64ec_range( base, size );
+    }
+
     if (!status)
     {
         VIRTUAL_DEBUG_DUMP_VIEW( view );
@@ -5934,6 +5959,18 @@ NTSTATUS WINAPI NtProtectVirtualMemory( HANDLE process, PVOID *addr_ptr, SIZE_T 
         else status = STATUS_NOT_COMMITTED;
     }
     else status = STATUS_INVALID_PARAMETER;
+
+    /* If protection was successfully changed to include execute permission on a
+     * valloc view, register it in the ARM64EC code map. This handles the case where
+     * applications allocate memory with VirtualAlloc (non-executable) and later
+     * call VirtualProtect to make it executable after unpacking code into it.
+     * Only apply to valloc views to avoid marking Wine/FEX native ARM64 pages. */
+    if (status == STATUS_SUCCESS && arm64ec_view && is_view_valloc( view ) &&
+        (new_prot & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY)))
+    {
+        commit_arm64ec_map( view );
+        set_arm64ec_range( base, size );
+    }
 
     if (!status) VIRTUAL_DEBUG_DUMP_VIEW( view );
 
