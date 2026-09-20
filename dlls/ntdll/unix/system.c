@@ -4432,6 +4432,27 @@ NTSTATUS WINAPI NtQuerySystemInformationEx( SYSTEM_INFORMATION_CLASS class,
             machines[i].Process = supported_machines[i] == machine;
             machines[i].WoW64Container = 1;
         }
+
+        /* Blizzard's protected loaders call IsWow64Process2()/GetNativeSystemInfo() and take a
+         * different path when the native machine reports ARM64, so the emulated process cannot
+         * get past its own environment check. Opt in with WINE_REPORT_X86_MACHINE=1 to report an
+         * x86-64 host instead. Diagnostic switch, off by default. */
+        {
+            static int spoof_x86 = -1;
+            if (spoof_x86 == -1)
+            {
+                const char *var = getenv( "WINE_REPORT_X86_MACHINE" );
+                spoof_x86 = (var && *var != '0');
+            }
+            if (spoof_x86)
+            {
+                for (i = 0; i < supported_machines_count; i++)
+                {
+                    if (machines[i].Machine != IMAGE_FILE_MACHINE_ARM64) continue;
+                    machines[i].Machine = IMAGE_FILE_MACHINE_AMD64;
+                }
+            }
+        }
         ret = STATUS_SUCCESS;
         break;
     }
