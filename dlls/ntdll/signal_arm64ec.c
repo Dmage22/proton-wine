@@ -733,7 +733,15 @@ static void notify_map_view_of_section( HANDLE handle, void *addr, SIZE_T size, 
 
     if (!pNotifyMapViewOfSection) return;
     if (!NtCurrentTeb()->Tib.ArbitraryUserPointer) return;
-    if (NtQuerySection( handle, SectionImageInformation, &info, sizeof(info), NULL )) return;
+    /* The queried image information is not used; this call only ever served to check that the
+     * handle names a real section. Bailing on STATUS_SECTION_NOT_IMAGE meant the emulator was
+     * never told about views of non-image sections, so it could not know such a range is
+     * executable. Protectors that dodge W^X by double-mapping one pagefile-backed section -
+     * executable at one address, writable at another - depend on exactly that mapping being
+     * tracked (Blizzard's *_loader.dll among them). Let a non-image section through and keep
+     * bailing on every other failure. */
+    status = NtQuerySection( handle, SectionImageInformation, &info, sizeof(info), NULL );
+    if (status && status != STATUS_SECTION_NOT_IMAGE) return;
     status = pNotifyMapViewOfSection( NULL, addr, NULL, size, alloc, protect );
     if (NT_SUCCESS(status)) return;
     NtUnmapViewOfSection( GetCurrentProcess(), addr );
