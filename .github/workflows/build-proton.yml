@@ -204,7 +204,7 @@ jobs:
           cat > $GITHUB_WORKSPACE/profile.json << EOF
           {
             "type": "Proton",
-            "versionName": "11.0-2-${ARCH_NAME}",
+            "versionName": "11.0-2-${ARCH_NAME}-rpcfix",
             "versionCode": 1,
             "description": "Proton 11.0-2 ${ARCH_NAME} (bionic) — stock Valve + runtime ntsync (kernel driver, userspace fallback) + fsync + Android fixes. SDK 28 + 16KB pages. Needs a fresh arm64ec container.",
             "files": [],
@@ -220,7 +220,7 @@ jobs:
           cat > $GITHUB_WORKSPACE/profile-wine.json << EOF
           {
             "type": "Wine",
-            "versionName": "11.0-2-${ARCH_NAME}",
+            "versionName": "11.0-2-${ARCH_NAME}-rpcfix",
             "versionCode": 0,
             "description": "Proton 11.0-2 ${ARCH_NAME} (bionic) — stock Valve + runtime ntsync (kernel driver, userspace fallback) + fsync + Android fixes. SDK 28 + 16KB pages. Needs a fresh arm64ec container.",
             "files": [],
