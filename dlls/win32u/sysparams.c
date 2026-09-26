@@ -2163,6 +2163,7 @@ static SIZE *get_screen_sizes( const DEVMODEW *maximum, const DEVMODEW *modes, U
         {1600, 1200},
         /* 16:9 */
         {1280,  720},
+        {1366,  768},  /* common laptop size; some games (e.g. MapleStory clients) require it in the mode list */
         {1600,  900},
         {1920, 1080},
         {2560, 1440},
