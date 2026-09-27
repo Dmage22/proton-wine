@@ -1912,6 +1912,9 @@ NTSTATUS __attribute__((naked)) __wine_unix_call_arm64ec( unixlib_handle_t handl
 
 NTSTATUS (WINAPI *__wine_unix_call_dispatcher_arm64ec)( unixlib_handle_t, unsigned int, void * ) = __wine_unix_call_arm64ec;
 
+/* Tells the emulator that EFlags PF/AF survive context conversion in cpsr bits 26/27 (see eflags_to_cpsr) */
+ULONG __wine_arm64ec_extended_eflags = 1;
+
 static void __attribute__((naked)) arm64x_check_call_early(void)
 {
     asm( "mov x11, x9\n\t"
