@@ -292,7 +292,7 @@ do
 
     for patch in "${PATCHES[@]}"; do
 #      if git apply --check ./android/patches/$patch 2>/dev/null; then
-        git apply ./android/patches/$patch
+        git apply ./android/patches/$patch || { echo "ERROR: patch $patch failed to apply"; exit 1; }
 #      fi
     done
   fi

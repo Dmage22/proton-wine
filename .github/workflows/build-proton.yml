@@ -217,7 +217,7 @@ jobs:
           cat > $GITHUB_WORKSPACE/profile.json << EOF
           {
             "type": "Proton",
-            "versionName": "11.0-2-${ARCH_NAME}-8",
+            "versionName": "11.0-2-${ARCH_NAME}-8a",
             "versionCode": 1,
             "description": "Proton 11.0-2 ${ARCH_NAME} (bionic) — stock Valve + runtime ntsync (kernel driver, userspace fallback) + fsync + Android fixes. SDK 28 + 16KB pages. Needs a fresh arm64ec container.",
             "files": [],
@@ -233,7 +233,7 @@ jobs:
           cat > $GITHUB_WORKSPACE/profile-wine.json << EOF
           {
             "type": "Wine",
-            "versionName": "11.0-2-${ARCH_NAME}-8",
+            "versionName": "11.0-2-${ARCH_NAME}-8a",
             "versionCode": 0,
             "description": "Proton 11.0-2 ${ARCH_NAME} (bionic) — stock Valve + runtime ntsync (kernel driver, userspace fallback) + fsync + Android fixes. SDK 28 + 16KB pages. Needs a fresh arm64ec container.",
             "files": [],
@@ -316,7 +316,7 @@ jobs:
         id: generate_tag
         run: |
           DATE=$(date +%Y%m%d)
-          TAG_NAME="proton-11.0-2-${DATE}-8"
+          TAG_NAME="proton-11.0-2-${DATE}-8a"
           echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
           echo "Generated tag: ${TAG_NAME}"
 
@@ -327,7 +327,7 @@ jobs:
           name: Proton Wine 11.0-2 (${{ steps.generate_tag.outputs.tag_name }})
           files: release/*
           draft: false
-          prerelease: false
+          prerelease: true
           body: |
             # Caution: This version is provided for testing purposes only. It may lead to game instability or crashes. Use at your own risk.
 

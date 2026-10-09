@@ -1,8 +1,7 @@
 diff --git a/dlls/ntdll/unix/signal_arm64.c b/dlls/ntdll/unix/signal_arm64.c
-index c18e6507f6c..be2fcafe5cb 100644
 --- a/dlls/ntdll/unix/signal_arm64.c
 +++ b/dlls/ntdll/unix/signal_arm64.c
-@@ -237,6 +237,10 @@ void set_process_instrumentation_callback( void *callback )
+@@ -239,6 +239,10 @@
      if (callback) FIXME( "Not supported.\n" );
  }
  
@@ -13,7 +12,7 @@ index c18e6507f6c..be2fcafe5cb 100644
  
  /***********************************************************************
   *           syscall_frame_fixup_for_fastpath
-@@ -360,7 +364,18 @@ NTSTATUS signal_set_full_context( CONTEXT *context )
+@@ -379,7 +383,18 @@
      }
      else status = NtSetContextThread( GetCurrentThread(), context );
  
@@ -31,9 +30,9 @@ index c18e6507f6c..be2fcafe5cb 100644
 +
 +    if (!status && (context->ContextFlags & CONTEXT_INTEGER) == CONTEXT_INTEGER) /* TODO: also check with susp */
          frame->restore_flags |= CONTEXT_INTEGER;
- 
-     if (is_arm64ec() && !is_ec_code( frame->pc ))
-@@ -451,12 +466,20 @@ NTSTATUS WINAPI NtGetContextThread( HANDLE handle, CONTEXT *context )
+     return status;
+ }
+@@ -462,12 +477,20 @@
  {
      struct syscall_frame *frame = get_syscall_frame();
      DWORD needed_flags = context->ContextFlags & ~CONTEXT_ARM64;
@@ -57,7 +56,7 @@ index c18e6507f6c..be2fcafe5cb 100644
      }
  
      if (needed_flags & CONTEXT_INTEGER)
-@@ -1052,6 +1075,8 @@ static BOOL handle_syscall_fault( ucontext_t *context, EXCEPTION_RECORD *rec )
+@@ -1073,6 +1096,8 @@
  
      if (!is_inside_syscall( SP_sig(context) )) return FALSE;
  
