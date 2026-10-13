@@ -505,10 +505,32 @@ static BOOL grab_clipping_window( const RECT *clip )
         clip->right < clip_rect.right || clip->bottom < clip_rect.bottom)
         data->warp_serial = NextRequest( data->display );
 
+#ifdef __ANDROID__
+    /* GameNative's X server delivers ButtonPress during a pointer grab only to clients that
+     * selected it on the grab window itself. Nobody selects it on the shared clip window
+     * (only one client may), so grab on the foreground window, which this thread already
+     * listens to, and only confine the pointer to the clip window. */
+    {
+        HWND foreground = NtUserGetForegroundWindow();
+        struct x11drv_win_data *fg_data;
+        Window grab_window = clip_window;
+
+        if (foreground && (fg_data = get_win_data( foreground )))
+        {
+            if (fg_data->whole_window && fg_data->display == data->display) grab_window = fg_data->whole_window;
+            release_win_data( fg_data );
+        }
+        if (!XGrabPointer( data->display, grab_window, False,
+                           PointerMotionMask | ButtonPressMask | ButtonReleaseMask,
+                           GrabModeAsync, GrabModeAsync, clip_window, None, CurrentTime ))
+            clipping_cursor = TRUE;
+    }
+#else
     if (!XGrabPointer( data->display, clip_window, False,
                        PointerMotionMask | ButtonPressMask | ButtonReleaseMask,
                        GrabModeAsync, GrabModeAsync, clip_window, None, CurrentTime ))
         clipping_cursor = TRUE;
+#endif
 
     SERVER_START_REQ( set_cursor )
     {
