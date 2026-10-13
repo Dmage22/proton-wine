@@ -1329,13 +1329,7 @@ Window init_clip_window(void)
     if (!data->clip_window &&
         (data->clip_window = (Window)NtUserGetProp( NtUserGetDesktopWindow(), clip_window_prop )))
     {
-#ifdef __ANDROID__
-        /* GameNative's X server sends ButtonPress to the grab window's own event listeners
-         * instead of the pointer grab's, so the presses get lost while the cursor is clipped. */
-        XSelectInput( data->display, data->clip_window, StructureNotifyMask | ButtonPressMask );
-#else
         XSelectInput( data->display, data->clip_window, StructureNotifyMask );
-#endif
     }
     return data->clip_window;
 }
