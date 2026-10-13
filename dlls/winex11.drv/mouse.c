@@ -473,6 +473,10 @@ static BOOL grab_clipping_window( const RECT *clip )
     if (!data) return FALSE;
     if (!(clip_window = init_clip_window())) return TRUE;
 
+    /* Games may clip the cursor again every frame. Re-grabbing the pointer each time is
+     * redundant, and on some X servers (GameNative) button presses get lost in between. */
+    if (data->clipping_cursor && clipping_cursor && EqualRect( clip, &clip_rect )) return TRUE;
+
     if (keyboard_grabbed)
     {
         WARN( "refusing to clip to %s\n", wine_dbgstr_rect(clip) );
