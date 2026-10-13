@@ -2832,6 +2832,17 @@ static void create_whole_window( struct x11drv_win_data *data )
 
     set_gamescope_overlay_prop( data->display, data->whole_window, data->hwnd );
 
+#ifdef __ANDROID__
+    /* GameNative raises windows through winhandler using this handle. It used to be set only
+     * when _NET_ACTIVE_WINDOW is requested, which its X server doesn't support, so winhandler
+     * fell back to the process' main window and raised it over dialogs and their popups. */
+    {
+        long hwnd_data[2] = { (ULONG_PTR)data->hwnd & 0xffffffff, (ULONG64)(ULONG_PTR)data->hwnd >> 32 };
+        XChangeProperty( data->display, data->whole_window, x11drv_atom(_NET_WM_HWND),
+                         XA_CARDINAL, 32, PropModeReplace, (unsigned char *)hwnd_data, 2 );
+    }
+#endif
+
     /* set the window text */
     if (!NtUserInternalGetWindowText( data->hwnd, text, ARRAY_SIZE( text ))) text[0] = 0;
     sync_window_text( data->display, data->whole_window, text );
