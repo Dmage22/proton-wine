@@ -222,13 +222,11 @@ do
       "common/dlls_winex11_drv_x11drv_main_c.patch"
 
       # Android window and pointer fixes (Battle.net windows, clipped-cursor clicks,
-      # emulated fullscreen letterbox and mode switches)
+      # emulated fullscreen mode switches)
       "common/dlls_winex11_drv_window_c_net_wm_hwnd.patch"
       "common/dlls_winex11_drv_init_c.patch"
       "common/dlls_winex11_drv_mouse_c_clip_regrab.patch"
       "common/dlls_winex11_drv_mouse_c_clip_grab_foreground.patch"
-      "common/dlls_winex11_drv_window_c_letterbox.patch"
-      "common/dlls_win32u_sysparams_c_virtual_physical.patch"
 
       # address space patches
       "common/loader_preloader_c.patch"
@@ -287,7 +285,7 @@ do
 
     for patch in "${PATCHES[@]}"; do
 #      if git apply --check ./android/patches/$patch 2>/dev/null; then
-        git apply ./android/patches/$patch
+        git apply ./android/patches/$patch || { echo "ERROR: android/patches/$patch does not apply"; exit 1; }
 #      fi
     done
   fi
