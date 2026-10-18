@@ -9,9 +9,9 @@ name: Build Proton Wine (SDK 28, 16KB pages)
 
 on:
   push:
-    branches: [ proton_11.0-2 ]
+    branches: [ proton_11.0-2-d2r ]
   pull_request:
-    branches: [ proton_11.0-2 ]
+    branches: [ proton_11.0-2-d2r ]
   workflow_dispatch:
 
 jobs:
@@ -212,7 +212,7 @@ jobs:
           cat > $GITHUB_WORKSPACE/profile.json << EOF
           {
             "type": "Proton",
-            "versionName": "${PROTON_VERSION}-${ARCH_NAME}",
+            "versionName": "${PROTON_VERSION}-${ARCH_NAME}-17",
             "versionCode": 1,
             "description": "Proton 11.0-2 ${ARCH_NAME} (bionic) — stock Valve + runtime ntsync (kernel driver, userspace fallback) + fsync + Android fixes. SDK 28 + 16KB pages. Needs a fresh arm64ec container.",
             "files": [],
@@ -228,7 +228,7 @@ jobs:
           cat > $GITHUB_WORKSPACE/profile-wine.json << EOF
           {
             "type": "Wine",
-            "versionName": "${PROTON_VERSION}-${ARCH_NAME}",
+            "versionName": "${PROTON_VERSION}-${ARCH_NAME}-17",
             "versionCode": 0,
             "description": "Proton 11.0-2 ${ARCH_NAME} (bionic) — stock Valve + runtime ntsync (kernel driver, userspace fallback) + fsync + Android fixes. SDK 28 + 16KB pages. Needs a fresh arm64ec container.",
             "files": [],
@@ -292,7 +292,7 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-24.04
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/proton_11.0-2') || github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/proton_11.0-2-d2r') || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Download all artifacts
@@ -311,7 +311,7 @@ jobs:
         id: generate_tag
         run: |
           DATE=$(date +%Y%m%d)
-          TAG_NAME="proton-11.0-2-${DATE}"
+          TAG_NAME="proton-11.0-2-${DATE}-17"
           echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
           echo "Generated tag: ${TAG_NAME}"
 
@@ -322,7 +322,7 @@ jobs:
           name: Proton Wine 11.0-2 (${{ steps.generate_tag.outputs.tag_name }})
           files: release/*
           draft: false
-          prerelease: false
+          prerelease: true
           body: |
             # Caution: This version is provided for testing purposes only. It may lead to game instability or crashes. Use at your own risk.
 
