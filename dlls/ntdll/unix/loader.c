@@ -2813,11 +2813,35 @@ static void check_command_line( int argc, char *argv[] )
  *
  * Main entry point called by the wine loader.
  */
+#ifdef __ANDROID__
+/* Diagnostic: let WINE_FDSAN select Android's fdsan error level (default: warn always).
+ * In warn mode bionic logs the offending close() with a native backtrace instead of
+ * aborting the process. */
+static void init_android_fdsan(void)
+{
+    int (*set_level)(int) = dlsym( RTLD_DEFAULT, "android_fdsan_set_error_level" );
+    const char *env = getenv( "WINE_FDSAN" );
+    int level = 2; /* ANDROID_FDSAN_ERROR_LEVEL_WARN_ALWAYS */
+
+    if (!set_level) return;
+    if (env)
+    {
+        if (!strcmp( env, "off" )) level = 0;
+        else if (!strcmp( env, "once" )) level = 1;
+        else if (!strcmp( env, "fatal" )) level = 3;
+    }
+    set_level( level );
+}
+#endif
+
 DECLSPEC_EXPORT void __wine_main( int argc, char *argv[] )
 {
     main_argc = argc;
     main_argv = argv;
 
+#ifdef __ANDROID__
+    init_android_fdsan();
+#endif
     init_paths();
     if (!getenv( "WINELOADERNOEXEC" ) || argc <= 1) check_command_line( argc, argv );
     unsetenv( "WINELOADERNOEXEC" );

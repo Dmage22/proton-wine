@@ -191,6 +191,96 @@ static LONG call_vectored_handlers( EXCEPTION_RECORD *rec, CONTEXT *context )
 }
 
 
+static BOOL cxx_read( ULONG_PTR addr, void *buf, SIZE_T size )
+{
+    SIZE_T done = 0;
+    if (!addr) return FALSE;
+    return !NtReadVirtualMemory( NtCurrentProcess(), (void *)addr, buf, size, &done ) && done == size;
+}
+
+static void cxx_append( char *dst, size_t size, const char *src )
+{
+    size_t len = strlen( dst );
+    while (*src && len + 1 < size) dst[len++] = *src++;
+    dst[len] = 0;
+}
+
+/* Diagnostic: print the type names (and std::exception::what()) of a thrown MSVC C++ exception. */
+static void warn_cxx_exception( const EXCEPTION_RECORD *rec )
+{
+    ULONG_PTR throw_info, obj, base = 0, cta, ct, td, what_ptr;
+    char names[512] = "", what[256] = "", name[96];
+    BOOL is_std = FALSE, rva;
+    SIZE_T done;
+    int count, i;
+
+    if (rec->NumberParameters < 3) goto out;
+    obj = rec->ExceptionInformation[1];
+    throw_info = rec->ExceptionInformation[2];
+    if (rec->NumberParameters >= 4) base = rec->ExceptionInformation[3];
+    rva = (base != 0);
+
+    /* ThrowInfo: attributes, unwind, forward compat, catchable type array */
+    if (rva)
+    {
+        int fields[4];
+        if (!cxx_read( throw_info, fields, sizeof(fields) )) goto out;
+        cta = base + (ULONG)fields[3];
+    }
+    else
+    {
+        struct { UINT attr; void *unwind, *fwd, *cta; } info;
+        if (!cxx_read( throw_info, &info, sizeof(info) )) goto out;
+        cta = (ULONG_PTR)info.cta;
+    }
+    if (!cxx_read( cta, &count, sizeof(count) ) || count <= 0) goto out;
+    if (count > 8) count = 8;
+
+    for (i = 0; i < count; i++)
+    {
+        if (rva)
+        {
+            int ct_rva, type_rva;
+            if (!cxx_read( cta + 4 + i * 4, &ct_rva, sizeof(ct_rva) )) break;
+            ct = base + (ULONG)ct_rva;
+            if (!cxx_read( ct + 4, &type_rva, sizeof(type_rva) )) break;
+            td = base + (ULONG)type_rva;
+        }
+        else
+        {
+            void *ct_ptr, *type_ptr;
+            if (!cxx_read( cta + sizeof(int) + i * sizeof(void *), &ct_ptr, sizeof(ct_ptr) )) break;
+            ct = (ULONG_PTR)ct_ptr;
+            if (!cxx_read( ct + sizeof(UINT), &type_ptr, sizeof(type_ptr) )) break;
+            td = (ULONG_PTR)type_ptr;
+        }
+        /* TypeDescriptor: vtable pointer, spare pointer, decorated name (may end near a page end) */
+        memset( name, 0, sizeof(name) );
+        done = 0;
+        NtReadVirtualMemory( NtCurrentProcess(), (void *)(td + 2 * sizeof(void *)), name, sizeof(name) - 1, &done );
+        if (!done) NtReadVirtualMemory( NtCurrentProcess(), (void *)(td + 2 * sizeof(void *)), name, 16, &done );
+        name[sizeof(name) - 1] = 0;
+        if (!strcmp( name, ".?AVexception@std@@" )) is_std = TRUE;
+        if (names[0]) cxx_append( names, sizeof(names), " < " );
+        cxx_append( names, sizeof(names), name[0] ? name : "?" );
+    }
+
+    /* std::exception layout: vtable pointer, then const char *_What */
+    if (is_std && cxx_read( obj + sizeof(void *), &what_ptr, sizeof(what_ptr) ) && what_ptr)
+    {
+        done = 0;
+        NtReadVirtualMemory( NtCurrentProcess(), (void *)what_ptr, what, sizeof(what) - 1, &done );
+        what[sizeof(what) - 1] = 0;
+    }
+
+out:
+    if (what[0])
+        WARN( "C++ exception %s what=%s\n", names[0] ? names : "(unknown type)", debugstr_a(what) );
+    else
+        WARN( "C++ exception %s\n", names[0] ? names : "(unknown type)" );
+}
+
+
 /*******************************************************************
  *		dispatch_exception
  */
@@ -250,6 +340,10 @@ NTSTATUS WINAPI dispatch_exception( EXCEPTION_RECORD *rec, CONTEXT *context )
 
     case STATUS_ASSERTION_FAILURE:
         ERR( "assertion failure exception\n" );
+        break;
+
+    case EXCEPTION_WINE_CXX_EXCEPTION:
+        if (WARN_ON(seh)) warn_cxx_exception( rec );
         break;
 
     default:
