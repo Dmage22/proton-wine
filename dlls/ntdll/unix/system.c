@@ -2515,6 +2515,60 @@ static const char *get_smbios_string( const char *path, char *str, size_t size )
     return str;
 }
 
+static BOOL read_machine_id( const char *path, char *buf )
+{
+    int fd, i;
+    ssize_t len;
+
+    if ((fd = open( path, O_RDONLY )) == -1) return FALSE;
+    len = read( fd, buf, 32 );
+    close( fd );
+    if (len != 32) return FALSE;
+    for (i = 0; i < 32; i++)
+    {
+        char c = buf[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) return FALSE;
+    }
+    return TRUE;
+}
+
+/* Use a stable random machine id stored in the prefix when the host has none (e.g. Android),
+ * so that every prefix reports its own system UUID instead of an all-0xff one. */
+static BOOL get_prefix_machine_id( char *buf )
+{
+    static const char hexchars[] = "0123456789abcdef";
+    char *path, line[33], tmp[32];
+    BYTE rnd[16];
+    int fd, i;
+
+    if (!config_dir) return FALSE;
+    if (asprintf( &path, "%s/.machine-id", config_dir ) == -1) return FALSE;
+    if (read_machine_id( path, buf )) goto done;
+
+    get_random( rnd, sizeof(rnd) );
+    for (i = 0; i < 16; i++)
+    {
+        line[2 * i] = hexchars[rnd[i] >> 4];
+        line[2 * i + 1] = hexchars[rnd[i] & 0xf];
+    }
+    line[32] = '\n';
+
+    fd = open( path, O_WRONLY | O_CREAT | O_EXCL, 0644 );
+    /* replace an existing invalid file, but keep a valid one another process just created */
+    if (fd == -1 && errno == EEXIST && !read_machine_id( path, tmp ))
+        fd = open( path, O_WRONLY | O_TRUNC );
+    if (fd != -1)
+    {
+        if (write( fd, line, sizeof(line) ) != sizeof(line)) WARN( "failed to write %s\n", debugstr_a(path) );
+        close( fd );
+    }
+    /* prefer what is stored, so that all processes agree */
+    if (!read_machine_id( path, buf )) memcpy( buf, line, 32 );
+done:
+    free( path );
+    return TRUE;
+}
+
 static GUID *get_system_uuid( GUID *uuid )
 {
     static const unsigned char hex[] =
@@ -2527,31 +2581,29 @@ static GUID *get_system_uuid( GUID *uuid )
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,        /* 0x50 */
         0,10,11,12,13,14,15                     /* 0x60 */
     };
-    int fd;
+    char buf[32];
+    const unsigned char *p = (const unsigned char *)buf;
 
     memset( uuid, 0xff, sizeof(*uuid) );
-    if ((fd = open( "/var/lib/dbus/machine-id", O_RDONLY )) != -1)
-    {
-        unsigned char buf[32], *p = buf;
-        if (read( fd, buf, sizeof(buf) ) == sizeof(buf))
-        {
-            uuid->Data1 = hex[p[6]] << 28 | hex[p[7]] << 24 | hex[p[4]] << 20 | hex[p[5]] << 16 |
-                          hex[p[2]] << 12 | hex[p[3]] << 8  | hex[p[0]] << 4  | hex[p[1]];
+    if (!read_machine_id( "/var/lib/dbus/machine-id", buf ) &&
+        !read_machine_id( "/etc/machine-id", buf ) &&
+        !get_prefix_machine_id( buf ))
+        return uuid;
 
-            uuid->Data2 = hex[p[10]] << 12 | hex[p[11]] << 8 | hex[p[8]]  << 4 | hex[p[9]];
-            uuid->Data3 = hex[p[14]] << 12 | hex[p[15]] << 8 | hex[p[12]] << 4 | hex[p[13]];
+    uuid->Data1 = hex[p[6]] << 28 | hex[p[7]] << 24 | hex[p[4]] << 20 | hex[p[5]] << 16 |
+                  hex[p[2]] << 12 | hex[p[3]] << 8  | hex[p[0]] << 4  | hex[p[1]];
 
-            uuid->Data4[0] = hex[p[16]] << 4 | hex[p[17]];
-            uuid->Data4[1] = hex[p[18]] << 4 | hex[p[19]];
-            uuid->Data4[2] = hex[p[20]] << 4 | hex[p[21]];
-            uuid->Data4[3] = hex[p[22]] << 4 | hex[p[23]];
-            uuid->Data4[4] = hex[p[24]] << 4 | hex[p[25]];
-            uuid->Data4[5] = hex[p[26]] << 4 | hex[p[27]];
-            uuid->Data4[6] = hex[p[28]] << 4 | hex[p[29]];
-            uuid->Data4[7] = hex[p[30]] << 4 | hex[p[31]];
-        }
-        close( fd );
-    }
+    uuid->Data2 = hex[p[10]] << 12 | hex[p[11]] << 8 | hex[p[8]]  << 4 | hex[p[9]];
+    uuid->Data3 = hex[p[14]] << 12 | hex[p[15]] << 8 | hex[p[12]] << 4 | hex[p[13]];
+
+    uuid->Data4[0] = hex[p[16]] << 4 | hex[p[17]];
+    uuid->Data4[1] = hex[p[18]] << 4 | hex[p[19]];
+    uuid->Data4[2] = hex[p[20]] << 4 | hex[p[21]];
+    uuid->Data4[3] = hex[p[22]] << 4 | hex[p[23]];
+    uuid->Data4[4] = hex[p[24]] << 4 | hex[p[25]];
+    uuid->Data4[5] = hex[p[26]] << 4 | hex[p[27]];
+    uuid->Data4[6] = hex[p[28]] << 4 | hex[p[29]];
+    uuid->Data4[7] = hex[p[30]] << 4 | hex[p[31]];
     return uuid;
 }
 
