@@ -2486,8 +2486,11 @@ enable_dpnsvr=${enable_dpnsvr:-i386,x86_64,arm64ec,aarch64}
 enable_dxdiag=${enable_dxdiag:-yes}
 enable_msiexec=${enable_msiexec:-yes}
 enable_netsh=${enable_netsh:-yes}
+enable_powershell=${enable_powershell:-yes}
+enable_reg=${enable_reg:-yes}
 enable_regsvr32=${enable_regsvr32:-yes}
 enable_rundll32=${enable_rundll32:-yes}
+enable_wmic=${enable_wmic:-yes}
 
 dnl Disable Win16-related modules
 enable_win16=${enable_win16:-i386}
