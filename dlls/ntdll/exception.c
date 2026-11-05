@@ -273,6 +273,28 @@ static void warn_cxx_exception( const EXCEPTION_RECORD *rec )
         what[sizeof(what) - 1] = 0;
     }
 
+    /* Not a std::exception: dump the start of the object (e.g. an HRESULT error code member). */
+    if (!is_std && names[0])
+    {
+        BYTE raw[16];
+        static const char hexchars[] = "0123456789abcdef";
+        if (cxx_read( obj, raw, sizeof(raw) ))
+        {
+            char *p = what;
+            cxx_append( what, sizeof(what), "obj=" );
+            p = what + strlen( what );
+            for (i = 0; i < 16; i++)
+            {
+                *p++ = hexchars[raw[i] >> 4];
+                *p++ = hexchars[raw[i] & 0xf];
+                if (i % 4 == 3 && i < 15) *p++ = ' ';
+            }
+            *p = 0;
+            WARN( "C++ exception %s %s\n", names, what );
+            return;
+        }
+    }
+
 out:
     if (what[0])
         WARN( "C++ exception %s what=%s\n", names[0] ? names : "(unknown type)", debugstr_a(what) );
