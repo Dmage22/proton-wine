@@ -148,8 +148,16 @@ static const IClientSecurityVtbl client_security_vtbl =
 
 IClientSecurity client_security = { &client_security_vtbl };
 
+struct wbem_services;
+
 struct async_header
 {
+    struct list entry;
+    struct wbem_services *services;
+    BOOL pending;   /* in services->asyncs, guarded by services->cs */
+    BOOL oneshot;   /* finishes by itself instead of waiting to be cancelled */
+    BOOL orphaned;  /* cancelled from its own callback: async_proc frees it */
+    DWORD thread;   /* the worker running proc */
     IWbemObjectSink *sink;
     void (*proc)( struct async_header * );
     HANDLE cancel;
@@ -186,33 +194,65 @@ static BOOL init_async( struct async_header *async, IWbemObjectSink *sink,
     return TRUE;
 }
 
-static DWORD CALLBACK async_proc( LPVOID param )
-{
-    struct async_header *async = param;
-    HANDLE wait = async->wait;
-
-    async->proc( async );
-
-    WaitForSingleObject( async->cancel, INFINITE );
-    SetEvent( wait );
-    return ERROR_SUCCESS;
-}
-
-static HRESULT queue_async( struct async_header *async )
-{
-    if (QueueUserWorkItem( async_proc, async, WT_EXECUTELONGFUNCTION )) return S_OK;
-    return HRESULT_FROM_WIN32( GetLastError() );
-}
-
 struct wbem_services
 {
     IWbemServices IWbemServices_iface;
     LONG refs;
     CRITICAL_SECTION cs;
     enum wbm_namespace ns;
-    struct async_header *async;
+    struct list asyncs;
     IWbemContext *context;
 };
+
+static DWORD CALLBACK async_proc( LPVOID param )
+{
+    struct async_header *async = param;
+    struct wbem_services *services = async->services;
+    HANDLE wait = async->wait;
+    BOOL oneshot = async->oneshot, done = FALSE;
+
+    async->thread = GetCurrentThreadId();
+    async->proc( async );
+
+    /* A finished one-shot query that is still pending has nobody cancelling it, so it
+     * can go now; one cancelled from its own callback was left to us. Otherwise
+     * CancelAsyncCall or Release owns it and waits for us below. */
+    EnterCriticalSection( &services->cs );
+    if (oneshot && async->pending)
+    {
+        list_remove( &async->entry );
+        async->pending = FALSE;
+        done = TRUE;
+    }
+    else if (async->orphaned) done = TRUE;
+    LeaveCriticalSection( &services->cs );
+    if (done) free_async( async );
+    else
+    {
+        WaitForSingleObject( async->cancel, INFINITE );
+        SetEvent( wait );
+    }
+    /* taken in queue_async; may destroy services, so it goes last */
+    if (oneshot) IWbemServices_Release( &services->IWbemServices_iface );
+    return ERROR_SUCCESS;
+}
+
+/* called with services->cs held */
+static HRESULT queue_async( struct wbem_services *services, struct async_header *async, BOOL oneshot )
+{
+    async->services = services;
+    async->oneshot = oneshot;
+    async->pending = TRUE;
+    list_add_tail( &services->asyncs, &async->entry );
+    /* a one-shot query keeps services alive until it has finished with it; a
+     * notification query doesn't, so releasing services still cancels it */
+    if (oneshot) InterlockedIncrement( &services->refs );
+    if (QueueUserWorkItem( async_proc, async, WT_EXECUTELONGFUNCTION )) return S_OK;
+    if (oneshot) InterlockedDecrement( &services->refs );
+    list_remove( &async->entry );
+    async->pending = FALSE;
+    return HRESULT_FROM_WIN32( GetLastError() );
+}
 
 static inline struct wbem_services *impl_from_IWbemServices( IWbemServices *iface )
 {
@@ -233,15 +273,24 @@ static ULONG WINAPI wbem_services_Release(
     LONG refs = InterlockedDecrement( &ws->refs );
     if (!refs)
     {
+        struct async_header *async, *next;
+        struct list cancelled = LIST_INIT( cancelled );
+
         TRACE("destroying %p\n", ws);
 
         EnterCriticalSection( &ws->cs );
-        if (ws->async) SetEvent( ws->async->cancel );
-        LeaveCriticalSection( &ws->cs );
-        if (ws->async)
+        LIST_FOR_EACH_ENTRY_SAFE( async, next, &ws->asyncs, struct async_header, entry )
         {
-            WaitForSingleObject( ws->async->wait, INFINITE );
-            free_async( ws->async );
+            list_remove( &async->entry );
+            async->pending = FALSE;
+            list_add_tail( &cancelled, &async->entry );
+            SetEvent( async->cancel );
+        }
+        LeaveCriticalSection( &ws->cs );
+        LIST_FOR_EACH_ENTRY_SAFE( async, next, &cancelled, struct async_header, entry )
+        {
+            WaitForSingleObject( async->wait, INFINITE );
+            free_async( async );
         }
         ws->cs.DebugInfo->Spare[0] = 0;
         DeleteCriticalSection( &ws->cs );
@@ -304,20 +353,38 @@ static HRESULT WINAPI wbem_services_CancelAsyncCall(
     IWbemObjectSink *pSink )
 {
     struct wbem_services *services = impl_from_IWbemServices( iface );
-    struct async_header *async;
+    struct async_header *async, *found = NULL;
+    IWbemObjectSink *sink;
 
     TRACE("%p, %p\n", iface, pSink);
 
     if (!pSink) return WBEM_E_INVALID_PARAMETER;
+    if (FAILED(IWbemObjectSink_QueryInterface( pSink, &IID_IWbemObjectSink, (void **)&sink )))
+        return WBEM_E_INVALID_PARAMETER;
 
     EnterCriticalSection( &services->cs );
 
-    if (!(async = services->async))
+    LIST_FOR_EACH_ENTRY( async, &services->asyncs, struct async_header, entry )
+    {
+        if (async->sink != sink) continue;
+        found = async;
+        break;
+    }
+    IWbemObjectSink_Release( sink );
+    if (!(async = found))
     {
         LeaveCriticalSection( &services->cs );
         return WBEM_E_INVALID_PARAMETER;
     }
-    services->async = NULL;
+    list_remove( &async->entry );
+    async->pending = FALSE;
+    if (async->thread == GetCurrentThreadId())
+    {
+        /* called from the query's own callback: waiting for it would never end */
+        async->orphaned = TRUE;
+        LeaveCriticalSection( &services->cs );
+        return S_OK;
+    }
     SetEvent( async->cancel );
 
     LeaveCriticalSection( &services->cs );
@@ -766,12 +833,7 @@ static HRESULT WINAPI wbem_services_ExecQueryAsync(
 
     EnterCriticalSection( &services->cs );
 
-    if (services->async)
-    {
-        FIXME("handle more than one pending async\n");
-        hr = WBEM_E_FAILED;
-        goto done;
-    }
+    hr = E_OUTOFMEMORY;
     if (!(query = calloc( 1, sizeof(*query) ))) goto done;
     query->ns = services->ns;
     async = (struct async_header *)query;
@@ -786,9 +848,8 @@ static HRESULT WINAPI wbem_services_ExecQueryAsync(
         free_async( async );
         goto done;
     }
-    hr = queue_async( async );
-    if (hr == S_OK) services->async = async;
-    else
+    hr = queue_async( services, async, TRUE );
+    if (hr != S_OK)
     {
         free( query->str );
         free_async( async );
@@ -836,12 +897,7 @@ static HRESULT WINAPI wbem_services_ExecNotificationQueryAsync(
 
     EnterCriticalSection( &services->cs );
 
-    if (services->async)
-    {
-        FIXME("handle more than one pending async\n");
-        hr = WBEM_E_FAILED;
-        goto done;
-    }
+    hr = E_OUTOFMEMORY;
     if (!(query = calloc( 1, sizeof(*query) ))) goto done;
     async = (struct async_header *)query;
 
@@ -855,9 +911,8 @@ static HRESULT WINAPI wbem_services_ExecNotificationQueryAsync(
         free_async( async );
         goto done;
     }
-    hr = queue_async( async );
-    if (hr == S_OK) services->async = async;
-    else
+    hr = queue_async( services, async, FALSE );
+    if (hr != S_OK)
     {
         free( query->str );
         free_async( async );
@@ -992,6 +1047,7 @@ HRESULT WbemServices_create( const WCHAR *namespace, IWbemContext *context, LPVO
     ws->IWbemServices_iface.lpVtbl = &wbem_services_vtbl;
     ws->refs      = 1;
     ws->ns        = ns;
+    list_init( &ws->asyncs );
     InitializeCriticalSectionEx( &ws->cs, 0, RTL_CRITICAL_SECTION_FLAG_FORCE_DEBUG_INFO );
     ws->cs.DebugInfo->Spare[0] = (DWORD_PTR)(__FILE__ ": wbemprox_services.cs");
     if (context)
