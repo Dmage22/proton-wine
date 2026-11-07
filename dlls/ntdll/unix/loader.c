@@ -1767,6 +1767,20 @@ NTSTATUS load_builtin( const struct pe_image_info *image_info, UNICODE_STRING *n
     if (is_arm64ec() && image_info->is_hybrid && search_machine == IMAGE_FILE_MACHINE_AMD64)
         search_machine = current_machine;
 
+    /* x86-64 native dll in a pure ARM64 process (see is_system_x64_dll_for_arm64 in ntdll/loader.c):
+     * it can never be mapped, so use the ARM64 builtin if the load order allows it */
+    if (current_machine == IMAGE_FILE_MACHINE_ARM64 && !is_arm64ec() &&
+        image_info->machine == IMAGE_FILE_MACHINE_AMD64 && !image_info->is_hybrid &&
+        !image_info->wine_builtin && !image_info->wine_fakedll)
+    {
+        if (loadorder == LO_NATIVE) return STATUS_INVALID_IMAGE_FORMAT;
+        TRACE( "%s is x86-64, loading the ARM64 builtin instead\n", debugstr_us(nt_name) );
+        status = find_builtin_dll( nt_name, exp_name, module, size, info, limit_low, limit_high,
+                                   current_machine, machine, FALSE, offset );
+        if (status == STATUS_DLL_NOT_FOUND || status == STATUS_NOT_SUPPORTED) status = STATUS_INVALID_IMAGE_FORMAT;
+        return status;
+    }
+
     switch (loadorder)
     {
     case LO_NATIVE:

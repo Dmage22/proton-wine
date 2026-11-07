@@ -2816,6 +2816,24 @@ static NTSTATUS get_dll_load_path_search_flags( LPCWSTR module, DWORD flags, WCH
  *
  * Open a file for a new dll. Helper for find_dll_file.
  */
+/* An x86-64 native dll in system32 (e.g. DXVK installed by a frontend in an ARM64EC prefix)
+ * cannot be loaded into a pure ARM64 process, but the ARM64 builtin can replace it. */
+static BOOL is_system_x64_dll_for_arm64( const UNICODE_STRING *nt_name, const SECTION_IMAGE_INFORMATION *info )
+{
+    const WCHAR *name = nt_name->Buffer;
+    unsigned int len = nt_name->Length / sizeof(WCHAR), dirlen = wcslen( system_dir );
+
+    if (current_machine != IMAGE_FILE_MACHINE_ARM64 || info->Machine != IMAGE_FILE_MACHINE_AMD64) return FALSE;
+    if (len > 4 && !wcsncmp( name, L"\\??\\", 4 ))
+    {
+        name += 4;
+        len -= 4;
+    }
+    if (len <= dirlen || wcsnicmp( name, system_dir, dirlen )) return FALSE;
+    for (name += dirlen, len -= dirlen; len; name++, len--) if (*name == '\\') return FALSE;
+    return TRUE;
+}
+
 static NTSTATUS open_dll_file( UNICODE_STRING *nt_name, WINE_MODREF **pwm, HANDLE *mapping,
                                SECTION_IMAGE_INFORMATION *image_info, struct file_id *id )
 {
@@ -2864,7 +2882,12 @@ static NTSTATUS open_dll_file( UNICODE_STRING *nt_name, WINE_MODREF **pwm, HANDL
     if (!status)
     {
         NtQuerySection( *mapping, SectionImageInformation, image_info, sizeof(*image_info), NULL );
-        if (!is_valid_binary( handle, image_info ))
+        if (!is_valid_binary( handle, image_info ) && is_system_x64_dll_for_arm64( nt_name, image_info ))
+        {
+            /* let the load order decide: the builtin replaces it, see load_builtin */
+            TRACE( "%s is for arch %x, trying the builtin instead\n", debugstr_us(nt_name), image_info->Machine );
+        }
+        else if (!is_valid_binary( handle, image_info ))
         {
             TRACE( "%s is for arch %x, continuing search\n", debugstr_us(nt_name), image_info->Machine );
             status = STATUS_NOT_SUPPORTED;
