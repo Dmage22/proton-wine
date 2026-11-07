@@ -32,7 +32,11 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
+#include <fcntl.h>
 #include <sys/types.h>
+#include <sys/uio.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 #ifdef HAVE_SYS_PARAM_H
 # include <sys/param.h>
@@ -1538,6 +1542,96 @@ void signal_free_thread( TEB *teb )
 /**********************************************************************
  *		signal_init_process
  */
+/* Diagnostic: WINE_PC_SAMPLER=<exe name> samples the main thread's PC once a second in the
+ * process whose command line contains that name (to locate busy loops without a debugger). */
+static pthread_t pc_sampler_main;
+
+static void pc_sampler_read( const void *addr, void *buf, size_t size )
+{
+    struct iovec local = { buf, size }, remote = { (void *)addr, size };
+    if (syscall( __NR_process_vm_readv, getpid(), &local, 1, &remote, 1, 0 ) != size) memset( buf, 0, size );
+}
+
+static void pc_sampler_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+{
+    ucontext_t *context = sigcontext;
+    ULONG64 pc = PC_sig(context), lr = LR_sig(context), sp = SP_sig(context);
+    unsigned int code[8];
+    ULONG64 stack[8];
+    char buf[640];
+    int len;
+
+    pc_sampler_read( (void *)(pc - 16), code, sizeof(code) );
+    pc_sampler_read( (void *)sp, stack, sizeof(stack) );
+    len = snprintf( buf, sizeof(buf),
+                    "pcsample: tid %04x pc %016llx lr %016llx sp %016llx fp %016llx x0 %llx x1 %llx x2 %llx x8 %llx x16 %llx x17 %llx"
+                    " code[-16..+16] %08x %08x %08x %08x [%08x] %08x %08x %08x stack %llx %llx %llx %llx\n",
+                    (unsigned int)GetCurrentThreadId(), (unsigned long long)pc, (unsigned long long)lr,
+                    (unsigned long long)sp, (unsigned long long)FP_sig(context),
+                    (unsigned long long)REGn_sig(0, context), (unsigned long long)REGn_sig(1, context),
+                    (unsigned long long)REGn_sig(2, context), (unsigned long long)REGn_sig(8, context),
+                    (unsigned long long)REGn_sig(16, context), (unsigned long long)REGn_sig(17, context),
+                    code[0], code[1], code[2], code[3], code[4], code[5], code[6], code[7],
+                    (unsigned long long)stack[0], (unsigned long long)stack[1],
+                    (unsigned long long)stack[2], (unsigned long long)stack[3] );
+    if (len > 0) write( 2, buf, min( len, sizeof(buf) - 1 ) );
+}
+
+static void *pc_sampler_thread( void *arg )
+{
+    const char *name = arg;
+    char cmdline[1024];
+    unsigned int i;
+    ssize_t size;
+    int fd;
+
+    sleep( 5 );  /* let the main exe start */
+    if ((fd = open( "/proc/self/cmdline", O_RDONLY )) == -1) return NULL;
+    size = read( fd, cmdline, sizeof(cmdline) - 1 );
+    close( fd );
+    if (size <= 0) return NULL;
+    for (i = 0; i < size; i++) if (!cmdline[i]) cmdline[i] = ' ';
+    cmdline[size] = 0;
+    for (i = 0; cmdline[i]; i++)
+    {
+        unsigned int j;
+        for (j = 0; name[j]; j++)
+        {
+            char c1 = cmdline[i + j], c2 = name[j];
+            if (c1 >= 'A' && c1 <= 'Z') c1 += 'a' - 'A';
+            if (c2 >= 'A' && c2 <= 'Z') c2 += 'a' - 'A';
+            if (c1 != c2) break;
+        }
+        if (!name[j]) break;
+    }
+    if (!cmdline[i]) return NULL;
+
+    fprintf( stderr, "pcsample: sampling main thread of %s\n", cmdline );
+    for (;;)
+    {
+        sleep( 1 );
+        if (pthread_kill( pc_sampler_main, SIGPROF )) break;
+    }
+    return NULL;
+}
+
+static void pc_sampler_init( const struct sigaction *base )
+{
+    const char *name = getenv( "WINE_PC_SAMPLER" );
+    struct sigaction sig_act = *base;
+    pthread_attr_t attr;
+    pthread_t thread;
+
+    if (!name || !*name) return;
+    pc_sampler_main = pthread_self();
+    sig_act.sa_sigaction = pc_sampler_handler;
+    if (sigaction( SIGPROF, &sig_act, NULL ) == -1) return;
+    pthread_attr_init( &attr );
+    pthread_attr_setdetachstate( &attr, PTHREAD_CREATE_DETACHED );
+    pthread_create( &thread, &attr, pc_sampler_thread, (void *)name );
+    pthread_attr_destroy( &attr );
+}
+
 void signal_init_process(void)
 {
     struct sigaction sig_act;
@@ -1571,6 +1665,7 @@ void signal_init_process(void)
     if (sigaction( SIGILL, &sig_act, NULL ) == -1) goto error;
     sig_act.sa_sigaction = bus_handler;
     if (sigaction( SIGBUS, &sig_act, NULL ) == -1) goto error;
+    pc_sampler_init( &sig_act );
     return;
 
  error:
