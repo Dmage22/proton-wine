@@ -1,19 +1,49 @@
 diff --git a/dlls/winex11.drv/init.c b/dlls/winex11.drv/init.c
-index 479ff421a39..d1612e0c4f3 100644
+index 479ff421a39..9f83a491c03 100644
 --- a/dlls/winex11.drv/init.c
 +++ b/dlls/winex11.drv/init.c
-@@ -556,7 +556,14 @@ static BOOL disable_opwr(void)
-     if (disable == -1)
-     {
-         const char *e = getenv( "WINE_DISABLE_VULKAN_OPWR" );
-+#ifdef __ANDROID__
-+        /* Other process rendering needs XComposite to keep the surface offscreen, which
-+         * Android X servers don't provide: the surface shows up at the screen origin.
-+         * Failing it makes Chromium-based launchers fall back to software compositing. */
-+        disable = !e || atoi( e );
-+#else
-         disable = e && atoi( e );
-+#endif
+@@ -356,6 +356,15 @@ static void x11drv_client_surface_detach( struct client_surface *client )
      }
-     return disable;
  }
+ 
++#ifdef __ANDROID__
++/* Android X servers (e.g. GameNative's) have neither XComposite nor child clipping and draw
++ * a window's presented content even when an ancestor is unmapped, so other process surfaces
++ * created under the dummy parent show up at the screen origin. Instead, create them as
++ * mapped override-redirect toplevels far outside the screen and let
++ * X11DRV_client_surface_present copy their contents into the target window. */
++#define ANDROID_OPWR_OFFSCREEN_POS (-16384)
++#endif
++
+ static void client_surface_update_geometry( HWND hwnd, struct x11drv_client_surface *surface )
+ {
+     UINT dpi = surface->raw ? NtUserGetWinMonitorDpi( hwnd, MDT_WINE_RAW_DPI ) : NtUserGetDpiForWindow( hwnd );
+@@ -378,6 +387,10 @@ static void client_surface_update_geometry( HWND hwnd, struct x11drv_client_surf
+ 
+     changes.x = rect.left;
+     changes.y = rect.top;
++#ifdef __ANDROID__
++    /* keep other process surfaces off-screen, see x11drv_client_surface_create */
++    if (surface->other_process) changes.x = changes.y = ANDROID_OPWR_OFFSCREEN_POS;
++#endif
+     changes.width  = min( max( 1, rect.right - rect.left ), 65535 );
+     changes.height = min( max( 1, rect.bottom - rect.top ), 65535 );
+     OffsetRect( &rect, -rect.left, -rect.top );
+@@ -600,8 +613,17 @@ Window x11drv_client_surface_create( HWND hwnd, BOOL raw, int format, struct cli
+         attr.win_gravity = NorthWestGravity;
+         attr.backing_store = NotUseful;
+         attr.border_pixel = 0;
++#ifdef __ANDROID__
++        attr.override_redirect = True;
++        surface->changes.x = surface->changes.y = ANDROID_OPWR_OFFSCREEN_POS;
++        surface->window = XCreateWindow( gdi_display, root_window, ANDROID_OPWR_OFFSCREEN_POS, ANDROID_OPWR_OFFSCREEN_POS,
++                                         width, height, 0, default_visual.depth, InputOutput, default_visual.visual,
++                                         CWBitGravity | CWWinGravity | CWBackingStore | CWColormap | CWBorderPixel |
++                                         CWOverrideRedirect, &attr );
++#else
+         surface->window = XCreateWindow( gdi_display, get_dummy_parent(), 0, 0, width, height, 0, default_visual.depth, InputOutput,
+                                          default_visual.visual, CWBitGravity | CWWinGravity | CWBackingStore | CWColormap | CWBorderPixel, &attr );
++#endif
+         if (surface->window)
+         {
+             XMapWindow( gdi_display, surface->window );
