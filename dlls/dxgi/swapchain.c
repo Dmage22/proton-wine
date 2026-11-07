@@ -1831,6 +1831,7 @@ static HRESULT d3d12_swapchain_create_vulkan_swapchain(struct d3d12_swapchain *s
     VkPhysicalDevice vk_physical_device = swapchain->vk_physical_device;
     const struct dxgi_vk_funcs *vk_funcs = &swapchain->vk_funcs;
     VkSwapchainCreateInfoKHR vk_swapchain_desc;
+    VkCompositeAlphaFlagBitsKHR composite_alpha;
     VkDevice vk_device = swapchain->vk_device;
     unsigned int width, height, image_count;
     VkSurfaceCapabilitiesKHR surface_caps;
@@ -1879,9 +1880,15 @@ static HRESULT d3d12_swapchain_create_vulkan_swapchain(struct d3d12_swapchain *s
 
     TRACE("Vulkan swapchain extent %ux%u.\n", width, height);
 
-    if (!(surface_caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR))
+    /* Opaque is preferred. X servers whose default visual has an alpha channel (e.g.
+     * GameNative's) only offer inherit / pre-multiplied, like DXVK fall back to inherit. */
+    if (surface_caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR)
+        composite_alpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    else if (surface_caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR)
+        composite_alpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+    else
     {
-        FIXME("Unsupported alpha mode.\n");
+        FIXME("Unsupported alpha modes %#x.\n", surface_caps.supportedCompositeAlpha);
         return DXGI_ERROR_UNSUPPORTED;
     }
 
@@ -1912,7 +1919,7 @@ static HRESULT d3d12_swapchain_create_vulkan_swapchain(struct d3d12_swapchain *s
     vk_swapchain_desc.queueFamilyIndexCount = 0;
     vk_swapchain_desc.pQueueFamilyIndices = NULL;
     vk_swapchain_desc.preTransform = surface_caps.currentTransform;
-    vk_swapchain_desc.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    vk_swapchain_desc.compositeAlpha = composite_alpha;
     vk_swapchain_desc.presentMode = swapchain->present_mode;
     vk_swapchain_desc.clipped = VK_TRUE;
     vk_swapchain_desc.oldSwapchain = swapchain->vk_swapchain;
