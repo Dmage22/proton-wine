@@ -221,9 +221,9 @@ jobs:
           cat > $GITHUB_WORKSPACE/profile.json << EOF
           {
             "type": "Proton",
-            "versionName": "${PROTON_VERSION}-${ARCH_NAME}-9124",
+            "versionName": "${PROTON_VERSION}-${ARCH_NAME}-9125",
             "versionCode": 1,
-            "description": "Proton 11.0-2 ${ARCH_NAME} DIAGNOSTIC build 9124 (Dmage22) — GameNative proton_11.0-2 ff8c03d (rebuild 9 source) + Valve ARM64EC fixes (2026-09-05), RtlWaitOnAddress lost-wakeup fix, SIGQUIT blocked, RtlpUnWaitCriticalSection hardening, MapleStory launch fixes (GE: CharPrevA NULL, SPI sticky/filter keys), reg/powershell/wmic built ARM64X, per-prefix SMBIOS UUID, wbemprox multiple pending async calls, crypt32 decoder FIXME only on real failure, Vulkan other-process surfaces kept off-screen and copied (Chromium GPU in Battle.net). SDK 28 + 16KB pages.",
+            "description": "Proton 11.0-2 ${ARCH_NAME} DIAGNOSTIC build 9125 (Dmage22) — GameNative proton_11.0-2 ff8c03d (rebuild 9 source) + Valve ARM64EC fixes (2026-09-05), RtlWaitOnAddress lost-wakeup fix, SIGQUIT blocked, RtlpUnWaitCriticalSection hardening, MapleStory launch fixes (GE: CharPrevA NULL, SPI sticky/filter keys), reg/powershell/wmic built ARM64X, per-prefix SMBIOS UUID, wbemprox multiple pending async calls, crypt32 decoder FIXME only on real failure, Vulkan other-process surfaces kept behind their window and copied (Chromium GPU in Battle.net). SDK 28 + 16KB pages.",
             "files": [],
             "wine": {
               "binPath": "bin",
@@ -237,9 +237,9 @@ jobs:
           cat > $GITHUB_WORKSPACE/profile-wine.json << EOF
           {
             "type": "Wine",
-            "versionName": "${PROTON_VERSION}-${ARCH_NAME}-9124",
+            "versionName": "${PROTON_VERSION}-${ARCH_NAME}-9125",
             "versionCode": 0,
-            "description": "Proton 11.0-2 ${ARCH_NAME} DIAGNOSTIC build 9124 (Dmage22) — GameNative proton_11.0-2 ff8c03d (rebuild 9 source) + Valve ARM64EC fixes (2026-09-05), RtlWaitOnAddress lost-wakeup fix, SIGQUIT blocked, RtlpUnWaitCriticalSection hardening, MapleStory launch fixes (GE: CharPrevA NULL, SPI sticky/filter keys), reg/powershell/wmic built ARM64X, per-prefix SMBIOS UUID, wbemprox multiple pending async calls, crypt32 decoder FIXME only on real failure, Vulkan other-process surfaces kept off-screen and copied (Chromium GPU in Battle.net). SDK 28 + 16KB pages.",
+            "description": "Proton 11.0-2 ${ARCH_NAME} DIAGNOSTIC build 9125 (Dmage22) — GameNative proton_11.0-2 ff8c03d (rebuild 9 source) + Valve ARM64EC fixes (2026-09-05), RtlWaitOnAddress lost-wakeup fix, SIGQUIT blocked, RtlpUnWaitCriticalSection hardening, MapleStory launch fixes (GE: CharPrevA NULL, SPI sticky/filter keys), reg/powershell/wmic built ARM64X, per-prefix SMBIOS UUID, wbemprox multiple pending async calls, crypt32 decoder FIXME only on real failure, Vulkan other-process surfaces kept behind their window and copied (Chromium GPU in Battle.net). SDK 28 + 16KB pages.",
             "files": [],
             "wine": {
               "binPath": "bin",
@@ -271,8 +271,8 @@ jobs:
           if [ -n "$PR_NUMBER" ]; then
             PR_PART="-$PR_NUMBER"
           fi
-          PROTON_WCP="proton-$PROTON_VERSION-$ARCH_NAME-9124$PR_PART.wcp"
-          WINE_WCP="proton-wine-$PROTON_VERSION-$ARCH_NAME-9124$PR_PART.wcp.xz"
+          PROTON_WCP="proton-$PROTON_VERSION-$ARCH_NAME-9125$PR_PART.wcp"
+          WINE_WCP="proton-wine-$PROTON_VERSION-$ARCH_NAME-9125$PR_PART.wcp.xz"
           echo "PROTON_WCP=$PROTON_WCP" >> $GITHUB_ENV
           echo "WINE_WCP=$WINE_WCP" >> $GITHUB_ENV
 
@@ -331,7 +331,7 @@ jobs:
         id: generate_tag
         run: |
           DATE=$(date +%Y%m%d)
-          TAG_NAME="proton-11.0-2-${DATE}-9124"
+          TAG_NAME="proton-11.0-2-${DATE}-9125"
           echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
           echo "Generated tag: ${TAG_NAME}"
 
