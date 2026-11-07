@@ -1,5 +1,5 @@
 diff --git a/dlls/winex11.drv/init.c b/dlls/winex11.drv/init.c
-index 479ff421a39..4dc9048d03e 100644
+index 479ff421a39..c42690e5fb3 100644
 --- a/dlls/winex11.drv/init.c
 +++ b/dlls/winex11.drv/init.c
 @@ -356,6 +356,26 @@ static void x11drv_client_surface_detach( struct client_surface *client )
@@ -50,7 +50,21 @@ index 479ff421a39..4dc9048d03e 100644
      XFlush( gdi_display );
  }
  
-@@ -600,15 +627,30 @@ Window x11drv_client_surface_create( HWND hwnd, BOOL raw, int format, struct cli
+@@ -528,6 +555,13 @@ static void X11DRV_client_surface_present( struct client_surface *client, HDC hd
+         set_dc_drawable( surface->hdc_dst, window, &rect_dst, IncludeInferiors );
+     if (region) NtGdiExtSelectClipRgn( surface->hdc_dst, region, RGN_COPY );
+ 
++#ifdef __ANDROID__
++    /* frame read back by win32u (other process surfaces), see win32u/vulkan.c readback_init */
++    if (client->readback_hdc)
++        NtGdiStretchBlt( surface->hdc_dst, 0, 0, rect_dst.right - rect_dst.left, rect_dst.bottom - rect_dst.top,
++                         client->readback_hdc, 0, 0, surface->rect.right, surface->rect.bottom, SRCCOPY, 0 );
++    else
++#endif
+     NtGdiStretchBlt( surface->hdc_dst, 0, 0, rect_dst.right - rect_dst.left, rect_dst.bottom - rect_dst.top,
+                      surface->hdc_src, 0, 0, surface->rect.right, surface->rect.bottom, SRCCOPY, 0 );
+     XFlush( gdi_display );
+@@ -600,15 +634,30 @@ Window x11drv_client_surface_create( HWND hwnd, BOOL raw, int format, struct cli
          attr.win_gravity = NorthWestGravity;
          attr.backing_store = NotUseful;
          attr.border_pixel = 0;
