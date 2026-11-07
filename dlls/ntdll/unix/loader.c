@@ -1735,6 +1735,18 @@ done:
 }
 
 
+/* file directly inside C:\windows\system32 */
+static BOOL is_system32_file( const UNICODE_STRING *nt_name )
+{
+    static const WCHAR system32W[] = {'\\','?','?','\\','C',':','\\','w','i','n','d','o','w','s','\\',
+                                      's','y','s','t','e','m','3','2','\\',0};
+    unsigned int i, len = nt_name->Length / sizeof(WCHAR), dirlen = ARRAY_SIZE(system32W) - 1;
+
+    if (len <= dirlen || wcsnicmp( nt_name->Buffer, system32W, dirlen )) return FALSE;
+    for (i = dirlen; i < len; i++) if (nt_name->Buffer[i] == '\\') return FALSE;
+    return TRUE;
+}
+
 /***********************************************************************
  *           load_builtin
  *
@@ -1771,7 +1783,8 @@ NTSTATUS load_builtin( const struct pe_image_info *image_info, UNICODE_STRING *n
      * it can never be mapped, so use the ARM64 builtin if the load order allows it */
     if (current_machine == IMAGE_FILE_MACHINE_ARM64 && !is_arm64ec() &&
         image_info->machine == IMAGE_FILE_MACHINE_AMD64 && !image_info->is_hybrid &&
-        !image_info->wine_builtin && !image_info->wine_fakedll)
+        !image_info->wine_builtin && !image_info->wine_fakedll &&
+        (image_info->image_charact & IMAGE_FILE_DLL) && is_system32_file( nt_name ))
     {
         if (loadorder == LO_NATIVE) return STATUS_INVALID_IMAGE_FORMAT;
         TRACE( "%s is x86-64, loading the ARM64 builtin instead\n", debugstr_us(nt_name) );
