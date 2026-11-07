@@ -1,42 +1,65 @@
 diff --git a/dlls/winex11.drv/init.c b/dlls/winex11.drv/init.c
-index 479ff421a39..9f83a491c03 100644
+index 479ff421a39..4dc9048d03e 100644
 --- a/dlls/winex11.drv/init.c
 +++ b/dlls/winex11.drv/init.c
-@@ -356,6 +356,15 @@ static void x11drv_client_surface_detach( struct client_surface *client )
+@@ -356,6 +356,26 @@ static void x11drv_client_surface_detach( struct client_surface *client )
      }
  }
  
 +#ifdef __ANDROID__
-+/* Android X servers (e.g. GameNative's) have neither XComposite nor child clipping and draw
-+ * a window's presented content even when an ancestor is unmapped, so other process surfaces
-+ * created under the dummy parent show up at the screen origin. Instead, create them as
-+ * mapped override-redirect toplevels far outside the screen and let
-+ * X11DRV_client_surface_present copy their contents into the target window. */
-+#define ANDROID_OPWR_OFFSCREEN_POS (-16384)
++/* Android X servers (e.g. GameNative's) have no XComposite and show every window that has
++ * presented content as its own layer, even under an unmapped parent or fully off-screen
++ * (such layers end up unpositioned at the screen origin). So other process surfaces created
++ * under the dummy parent show up at the screen origin. Instead, keep them as mapped
++ * override-redirect windows exactly behind the target window, at the bottom of the stacking
++ * order, and let X11DRV_client_surface_present copy their contents into the target window,
++ * which covers them. */
++static void android_opwr_position( HWND hwnd, UINT dpi, int *x, int *y )
++{
++    RECT rect;
++
++    *x = *y = 0;
++    if (!NtUserGetClientRect( hwnd, &rect, dpi )) return;
++    NtUserMapWindowPoints( hwnd, 0, (POINT *)&rect, 2, dpi );
++    *x = rect.left;
++    *y = rect.top;
++}
 +#endif
 +
  static void client_surface_update_geometry( HWND hwnd, struct x11drv_client_surface *surface )
  {
      UINT dpi = surface->raw ? NtUserGetWinMonitorDpi( hwnd, MDT_WINE_RAW_DPI ) : NtUserGetDpiForWindow( hwnd );
-@@ -378,6 +387,10 @@ static void client_surface_update_geometry( HWND hwnd, struct x11drv_client_surf
+@@ -378,6 +398,10 @@ static void client_surface_update_geometry( HWND hwnd, struct x11drv_client_surf
  
      changes.x = rect.left;
      changes.y = rect.top;
 +#ifdef __ANDROID__
-+    /* keep other process surfaces off-screen, see x11drv_client_surface_create */
-+    if (surface->other_process) changes.x = changes.y = ANDROID_OPWR_OFFSCREEN_POS;
++    /* keep other process surfaces behind their target window, see android_opwr_position */
++    if (surface->other_process) android_opwr_position( hwnd, dpi, &changes.x, &changes.y );
 +#endif
      changes.width  = min( max( 1, rect.right - rect.left ), 65535 );
      changes.height = min( max( 1, rect.bottom - rect.top ), 65535 );
      OffsetRect( &rect, -rect.left, -rect.top );
-@@ -600,8 +613,17 @@ Window x11drv_client_surface_create( HWND hwnd, BOOL raw, int format, struct cli
+@@ -393,6 +417,9 @@ static void client_surface_update_geometry( HWND hwnd, struct x11drv_client_surf
+     TRACE( "client window %p/%lx, requesting position %d,%d size %d,%d mask %#x\n", hwnd,
+            surface->window, changes.x, changes.y, changes.width, changes.height, mask );
+     XConfigureWindow( gdi_display, surface->window, mask, &changes );
++#ifdef __ANDROID__
++    if (surface->other_process) XLowerWindow( gdi_display, surface->window );
++#endif
+     XFlush( gdi_display );
+ }
+ 
+@@ -600,15 +627,30 @@ Window x11drv_client_surface_create( HWND hwnd, BOOL raw, int format, struct cli
          attr.win_gravity = NorthWestGravity;
          attr.backing_store = NotUseful;
          attr.border_pixel = 0;
 +#ifdef __ANDROID__
 +        attr.override_redirect = True;
-+        surface->changes.x = surface->changes.y = ANDROID_OPWR_OFFSCREEN_POS;
-+        surface->window = XCreateWindow( gdi_display, root_window, ANDROID_OPWR_OFFSCREEN_POS, ANDROID_OPWR_OFFSCREEN_POS,
++        android_opwr_position( hwnd, dpi, &surface->changes.x, &surface->changes.y );
++        surface->changes.width = width;
++        surface->changes.height = height;
++        surface->window = XCreateWindow( gdi_display, root_window, surface->changes.x, surface->changes.y,
 +                                         width, height, 0, default_visual.depth, InputOutput, default_visual.visual,
 +                                         CWBitGravity | CWWinGravity | CWBackingStore | CWColormap | CWBorderPixel |
 +                                         CWOverrideRedirect, &attr );
@@ -46,4 +69,16 @@ index 479ff421a39..9f83a491c03 100644
 +#endif
          if (surface->window)
          {
++#ifdef __ANDROID__
++            XLowerWindow( gdi_display, surface->window );
++#endif
              XMapWindow( gdi_display, surface->window );
+             XSync( gdi_display, False );
+             surface->other_process = TRUE;
+         }
+-        WARN( "Other process window %p / %#lx.\n", hwnd, surface->window );
++        WARN( "Other process window %p / %#lx at %d,%d %ux%u.\n", hwnd, surface->window,
++              surface->changes.x, surface->changes.y, width, height );
+     }
+ 
+     if (!surface->window && !(surface->window = create_client_window( hwnd, surface->rect, &visual, colormap ))) goto failed;
