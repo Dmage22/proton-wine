@@ -319,6 +319,14 @@ static void save_context( CONTEXT *context, const ucontext_t *sigcontext )
     context->Cpsr = PSTATE_sig(sigcontext); /* Current State Register */
     for (i = 0; i <= 28; i++) context->X[i] = REGn_sig( i, sigcontext );
     save_fpu( context, sigcontext );
+    /* the debug registers are not saved, but must not hold stack garbage: World of Warcraft's
+     * vectored handler reads them and takes stale bits for hardware breakpoints ("Game
+     * Initialization Failed: I"). Found and described by arusiasotto
+     * (Droid-Deck/DroidDeck-Proton issue #2, "WoW Forever ARM64: four ntdll gaps"). */
+    memset( context->Bcr, 0, sizeof(context->Bcr) );
+    memset( context->Bvr, 0, sizeof(context->Bvr) );
+    memset( context->Wcr, 0, sizeof(context->Wcr) );
+    memset( context->Wvr, 0, sizeof(context->Wvr) );
 }
 
 
