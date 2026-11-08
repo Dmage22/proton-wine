@@ -78,10 +78,12 @@ jobs:
             zlib1g-dev:i386
 
       - name: Download and extract termuxfs for ${{ matrix.arch }}
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p $HOME/termuxfs/${{ matrix.arch }}
           cd $HOME/termuxfs/${{ matrix.arch }}
-          wget https://github.com/GameNative/termux-on-gha/releases/download/build-20260218/termuxfs-${{ matrix.arch }}.tar
+          gh release download build-20260218 -R GameNative/termux-on-gha -p termuxfs-${{ matrix.arch }}.tar
           tar -xf termuxfs-${{ matrix.arch }}.tar
           ls -la $HOME/termuxfs/${{ matrix.arch }}/
 
