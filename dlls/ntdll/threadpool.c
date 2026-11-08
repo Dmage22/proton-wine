@@ -1054,10 +1054,18 @@ NTSTATUS WINAPI RtlDeleteTimer(HANDLE TimerQueue, HANDLE Timer,
 /***********************************************************************
  *           timerqueue_thread_proc    (internal)
  */
+/* DIAGNOSTIC: report threadpool loops that keep going round without sleeping. */
+static void diag_spin( const char *loop, ULONG *count, ULONG_PTR a, ULONG_PTR b, ULONG_PTR c, ULONG_PTR d )
+{
+    if (++*count & 0xffff) return;
+    ERR( "DIAG spin %s: %lu turns, %Ix %Ix %Ix %Ix\n", loop, *count, a, b, c, d );
+}
+
 static void CALLBACK timerqueue_thread_proc( void *param )
 {
     ULONGLONG timeout_lower, timeout_upper, new_timeout;
     struct threadpool_object *other_timer;
+    ULONG diag_count = 0;
     LARGE_INTEGER now, timeout;
     struct list *ptr;
 
@@ -1121,8 +1129,11 @@ static void CALLBACK timerqueue_thread_proc( void *param )
         /* Wait for timer update events or until the next timer expires. */
         if (timerqueue.objcount)
         {
+            NTSTATUS diag_status;
             timeout.QuadPart = timeout_lower;
-            RtlSleepConditionVariableCS( &timerqueue.update_event, &timerqueue.cs, &timeout );
+            diag_status = RtlSleepConditionVariableCS( &timerqueue.update_event, &timerqueue.cs, &timeout );
+            diag_spin( "timerqueue", &diag_count, diag_status, (ULONG_PTR)(timeout_lower >> 32),
+                       (ULONG_PTR)(ULONG)timeout_lower, timerqueue.objcount );
             continue;
         }
 
@@ -1252,6 +1263,7 @@ static void CALLBACK waitqueue_thread_proc( void *param )
     LARGE_INTEGER now, timeout;
     DWORD num_handles;
     NTSTATUS status;
+    ULONG diag_count = 0;
 
     TRACE( "starting wait queue thread\n" );
     set_thread_name(L"wine_threadpool_waitqueue");
@@ -1325,6 +1337,8 @@ static void CALLBACK waitqueue_thread_proc( void *param )
             RtlLeaveCriticalSection( &waitqueue.cs );
             status = NtWaitForMultipleObjects( num_handles + 1, handles, WaitAny, bucket->alertable, &timeout );
             RtlEnterCriticalSection( &waitqueue.cs );
+            diag_spin( "waitqueue", &diag_count, status, num_handles, (ULONG_PTR)handles[0],
+                       (ULONG_PTR)(timeout.QuadPart >> 32) );
 
             if (status >= STATUS_WAIT_0 && status < STATUS_WAIT_0 + num_handles)
             {
@@ -1534,6 +1548,7 @@ static void CALLBACK ioqueue_thread_proc( void *param )
     ULONG_PTR key, value;
     BOOL destroy, skip;
     NTSTATUS status;
+    ULONG diag_count = 0;
 
     TRACE( "starting I/O completion thread\n" );
     set_thread_name(L"wine_threadpool_ioqueue");
@@ -1543,7 +1558,9 @@ static void CALLBACK ioqueue_thread_proc( void *param )
     for (;;)
     {
         RtlLeaveCriticalSection( &ioqueue.cs );
-        if ((status = NtRemoveIoCompletion( ioqueue.port, &key, &value, &iosb, NULL )))
+        status = NtRemoveIoCompletion( ioqueue.port, &key, &value, &iosb, NULL );
+        diag_spin( "ioqueue", &diag_count, status, key, value, ioqueue.objcount );
+        if (status)
             ERR("NtRemoveIoCompletion failed, status %#lx.\n", status);
         RtlEnterCriticalSection( &ioqueue.cs );
 
@@ -2360,6 +2377,7 @@ static void CALLBACK threadpool_worker_proc( void *param )
     struct threadpool *pool = param;
     LARGE_INTEGER timeout;
     struct list *ptr;
+    ULONG diag_count = 0;
 
     TRACE( "starting worker thread for pool %p\n", pool );
     set_thread_name(L"wine_threadpool_worker");
@@ -2367,6 +2385,7 @@ static void CALLBACK threadpool_worker_proc( void *param )
     RtlEnterCriticalSection( &pool->cs );
     for (;;)
     {
+        diag_spin( "worker", &diag_count, (ULONG_PTR)pool, pool->num_workers, pool->num_busy_workers, pool->objcount );
         while ((ptr = threadpool_get_next_item( pool )))
         {
             struct threadpool_object *object = LIST_ENTRY( ptr, struct threadpool_object, pool_entry );
