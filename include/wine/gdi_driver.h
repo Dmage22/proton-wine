@@ -266,6 +266,9 @@ struct client_surface
     HWND                               hwnd;           /* window the surface was created for */
     LONG                               updated;        /* has been moved / resized / reparented */
     LONG                               offscreen;      /* client window is offscreen */
+#ifdef __ANDROID__
+    HDC                                readback_hdc;   /* DC holding the frame being presented, read back by win32u */
+#endif
 };
 
 W32KAPI void *client_surface_create( UINT size, const struct client_surface_funcs *funcs, HWND hwnd );
