@@ -328,6 +328,13 @@ static void save_context( CONTEXT *context, const ucontext_t *sigcontext )
     for (i = 0; i <= 28; i++) context->X[i] = REGn_sig( i, sigcontext );
     if (save_fpu( context->V, &context->Fpcr, &context->Fpsr, sigcontext ))
         context->ContextFlags |= CONTEXT_FLOATING_POINT;
+    /* the debug registers are not saved, but must not hold stack garbage: World of Warcraft's
+     * vectored handler reads them and takes stale bits for hardware breakpoints ("Game
+     * Initialization Failed: I"). */
+    memset( context->Bcr, 0, sizeof(context->Bcr) );
+    memset( context->Bvr, 0, sizeof(context->Bvr) );
+    memset( context->Wcr, 0, sizeof(context->Wcr) );
+    memset( context->Wvr, 0, sizeof(context->Wvr) );
 }
 
 
