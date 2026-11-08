@@ -330,7 +330,8 @@ static void save_context( CONTEXT *context, const ucontext_t *sigcontext )
         context->ContextFlags |= CONTEXT_FLOATING_POINT;
     /* the debug registers are not saved, but must not hold stack garbage: World of Warcraft's
      * vectored handler reads them and takes stale bits for hardware breakpoints ("Game
-     * Initialization Failed: I"). */
+     * Initialization Failed: I"). Found and described by arusiasotto
+     * (Droid-Deck/DroidDeck-Proton issue #2, "WoW Forever ARM64: four ntdll gaps"). */
     memset( context->Bcr, 0, sizeof(context->Bcr) );
     memset( context->Bvr, 0, sizeof(context->Bvr) );
     memset( context->Wcr, 0, sizeof(context->Wcr) );

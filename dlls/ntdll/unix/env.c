@@ -149,7 +149,8 @@ static void *read_nls_file( const char *name )
 }
 
 /* Fallback when an NLS file cannot be mapped as a section: read it into private, read-only
- * memory of the current process (World of Warcraft ARM64 aborts in its locale init otherwise). */
+ * memory of the current process (World of Warcraft ARM64 aborts in its locale init otherwise).
+ * Gap found and described by arusiasotto (Droid-Deck/DroidDeck-Proton issue #2). */
 static void *read_nls_file_private( const char *path, SIZE_T *ret_size )
 {
     struct stat st;
