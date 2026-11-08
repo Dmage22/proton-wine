@@ -406,19 +406,35 @@ static NTSTATUS linux_wait_objs( int device, DWORD count, const int *objs, WAIT_
     struct timespec now;
     int ret;
 
+    /* Timeouts too far away to be expressed in nanoseconds (e.g. the threadpool's absolute
+     * MAXLONGLONG "never") are infinite. Multiplying them by 100 overflowed; the kernel
+     * driver happened to accept the wrapped value, but other ntsync implementations reject
+     * it with EINVAL, so every such wait failed immediately (STATUS_INVALID_PARAMETER) and
+     * the threadpool wait thread spun at 100% CPU. Compute in 100ns ticks to stay in range. */
     if (!timeout || timeout->QuadPart == TIMEOUT_INFINITE)
     {
         args.timeout = ~(__u64)0;
     }
     else if (timeout->QuadPart <= 0)
     {
-        clock_gettime( CLOCK_MONOTONIC, &now );
-        args.timeout = ((ULONGLONG)now.tv_sec * NSECPERSEC) + now.tv_nsec + (-timeout->QuadPart * 100);
+        ULONGLONG ticks = -(ULONGLONG)timeout->QuadPart;
+
+        if (ticks > LLONG_MAX / 200) args.timeout = ~(__u64)0;  /* leaves room for "now" */
+        else
+        {
+            clock_gettime( CLOCK_MONOTONIC, &now );
+            args.timeout = ((ULONGLONG)now.tv_sec * NSECPERSEC) + now.tv_nsec + ticks * 100;
+        }
     }
     else
     {
-        args.timeout = (timeout->QuadPart * 100) - (SECS_1601_TO_1970 * NSECPERSEC);
-        args.flags |= NTSYNC_WAIT_REALTIME;
+        const ULONGLONG epoch = SECS_1601_TO_1970 * TICKSPERSEC;  /* 1970-01-01 in NT ticks */
+        ULONGLONG ticks = timeout->QuadPart;
+
+        if (ticks <= epoch) args.timeout = 0;  /* before 1970: already expired */
+        else if (ticks - epoch > LLONG_MAX / 100) args.timeout = ~(__u64)0;
+        else args.timeout = (ticks - epoch) * 100;
+        if (args.timeout != ~(__u64)0) args.flags |= NTSYNC_WAIT_REALTIME;
     }
 
     args.objs = (uintptr_t)objs;
