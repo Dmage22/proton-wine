@@ -1,5 +1,5 @@
 diff --git a/dlls/ntdll/unix/sync.c b/dlls/ntdll/unix/sync.c
-index 67ab945cef8..b40bfe4802f 100644
+index 67ab945cef8..45db8bd13f0 100644
 --- a/dlls/ntdll/unix/sync.c
 +++ b/dlls/ntdll/unix/sync.c
 @@ -61,7 +61,14 @@
@@ -29,7 +29,7 @@ index 67ab945cef8..b40bfe4802f 100644
  
  static const char *debugstr_timeout( const LARGE_INTEGER *timeout )
  {
-@@ -312,8 +324,151 @@ static unsigned int validate_open_object_attributes( const OBJECT_ATTRIBUTES *at
+@@ -312,8 +324,167 @@ static unsigned int validate_open_object_attributes( const OBJECT_ATTRIBUTES *at
  
  #ifdef NTSYNC_IOC_EVENT_READ
  
@@ -130,19 +130,35 @@ index 67ab945cef8..b40bfe4802f 100644
 +    struct timespec now;
 +    int ret;
 +
++    /* Timeouts too far away to be expressed in nanoseconds (e.g. the threadpool's absolute
++     * MAXLONGLONG "never") are infinite. Multiplying them by 100 overflowed; the kernel
++     * driver happened to accept the wrapped value, but the userspace ntsync rejects it with
++     * EINVAL, so every such wait failed immediately (STATUS_INVALID_PARAMETER) and the
++     * threadpool wait thread spun at 100% CPU. Compute in 100ns ticks to stay in range. */
 +    if (!timeout || timeout->QuadPart == TIMEOUT_INFINITE)
 +    {
 +        args.timeout = ~(uint64_t)0;
 +    }
 +    else if (timeout->QuadPart <= 0)
 +    {
-+        clock_gettime( CLOCK_MONOTONIC, &now );
-+        args.timeout = ((ULONGLONG)now.tv_sec * NSECPERSEC) + now.tv_nsec + (-timeout->QuadPart * 100);
++        ULONGLONG ticks = -(ULONGLONG)timeout->QuadPart;
++
++        if (ticks > LLONG_MAX / 200) args.timeout = ~(uint64_t)0;  /* leaves room for "now" */
++        else
++        {
++            clock_gettime( CLOCK_MONOTONIC, &now );
++            args.timeout = ((ULONGLONG)now.tv_sec * NSECPERSEC) + now.tv_nsec + ticks * 100;
++        }
 +    }
 +    else
 +    {
-+        args.timeout = (timeout->QuadPart * 100) - (SECS_1601_TO_1970 * NSECPERSEC);
-+        args.flags |= NTSYNC_WAIT_REALTIME;
++        const ULONGLONG epoch = SECS_1601_TO_1970 * TICKSPERSEC;  /* 1970-01-01 in NT ticks */
++        ULONGLONG ticks = timeout->QuadPart;
++
++        if (ticks <= epoch) args.timeout = 0;  /* before 1970: already expired */
++        else if (ticks - epoch > LLONG_MAX / 100) args.timeout = ~(uint64_t)0;
++        else args.timeout = (ticks - epoch) * 100;
++        if (args.timeout != ~(uint64_t)0) args.flags |= NTSYNC_WAIT_REALTIME;
 +    }
 +
 +    args.objs = (uintptr_t)objs;
@@ -181,7 +197,7 @@ index 67ab945cef8..b40bfe4802f 100644
      if (ioctl( obj, NTSYNC_IOC_SEM_RELEASE, &count ) < 0)
      {
          if (errno == EOVERFLOW) return STATUS_SEMAPHORE_LIMIT_EXCEEDED;
-@@ -325,6 +480,9 @@ static NTSTATUS linux_release_semaphore_obj( int obj, ULONG count, ULONG *prev_c
+@@ -325,6 +496,9 @@ static NTSTATUS linux_release_semaphore_obj( int obj, ULONG count, ULONG *prev_c
  
  static NTSTATUS linux_query_semaphore_obj( int obj, SEMAPHORE_BASIC_INFORMATION *info )
  {
@@ -191,7 +207,7 @@ index 67ab945cef8..b40bfe4802f 100644
      struct ntsync_sem_args args = {0};
      if (ioctl( obj, NTSYNC_IOC_SEM_READ, &args ) < 0) return errno_to_status( errno );
      info->CurrentCount = args.count;
-@@ -334,7 +492,10 @@ static NTSTATUS linux_query_semaphore_obj( int obj, SEMAPHORE_BASIC_INFORMATION
+@@ -334,7 +508,10 @@ static NTSTATUS linux_query_semaphore_obj( int obj, SEMAPHORE_BASIC_INFORMATION
  
  static NTSTATUS linux_set_event_obj( int obj, LONG *prev_state )
  {
@@ -203,7 +219,7 @@ index 67ab945cef8..b40bfe4802f 100644
      if (ioctl( obj, NTSYNC_IOC_EVENT_SET, &prev ) < 0) return errno_to_status( errno );
      if (prev_state) *prev_state = prev;
      return STATUS_SUCCESS;
-@@ -342,7 +503,10 @@ static NTSTATUS linux_set_event_obj( int obj, LONG *prev_state )
+@@ -342,7 +519,10 @@ static NTSTATUS linux_set_event_obj( int obj, LONG *prev_state )
  
  static NTSTATUS linux_reset_event_obj( int obj, LONG *prev_state )
  {
@@ -215,7 +231,7 @@ index 67ab945cef8..b40bfe4802f 100644
      if (ioctl( obj, NTSYNC_IOC_EVENT_RESET, &prev ) < 0) return errno_to_status( errno );
      if (prev_state) *prev_state = prev;
      return STATUS_SUCCESS;
-@@ -350,7 +514,10 @@ static NTSTATUS linux_reset_event_obj( int obj, LONG *prev_state )
+@@ -350,7 +530,10 @@ static NTSTATUS linux_reset_event_obj( int obj, LONG *prev_state )
  
  static NTSTATUS linux_pulse_event_obj( int obj, LONG *prev_state )
  {
@@ -227,7 +243,7 @@ index 67ab945cef8..b40bfe4802f 100644
      if (ioctl( obj, NTSYNC_IOC_EVENT_PULSE, &prev ) < 0) return errno_to_status( errno );
      if (prev_state) *prev_state = prev;
      return STATUS_SUCCESS;
-@@ -358,6 +525,9 @@ static NTSTATUS linux_pulse_event_obj( int obj, LONG *prev_state )
+@@ -358,6 +541,9 @@ static NTSTATUS linux_pulse_event_obj( int obj, LONG *prev_state )
  
  static NTSTATUS linux_query_event_obj( int obj, EVENT_BASIC_INFORMATION *info )
  {
@@ -237,7 +253,7 @@ index 67ab945cef8..b40bfe4802f 100644
      struct ntsync_event_args args = {0};
      if (ioctl( obj, NTSYNC_IOC_EVENT_READ, &args ) < 0) return errno_to_status( errno );
      info->EventType = args.manual ? NotificationEvent : SynchronizationEvent;
-@@ -367,6 +537,9 @@ static NTSTATUS linux_query_event_obj( int obj, EVENT_BASIC_INFORMATION *info )
+@@ -367,6 +553,9 @@ static NTSTATUS linux_query_event_obj( int obj, EVENT_BASIC_INFORMATION *info )
  
  static NTSTATUS linux_release_mutex_obj( int obj, LONG *prev_count )
  {
@@ -247,7 +263,7 @@ index 67ab945cef8..b40bfe4802f 100644
      struct ntsync_mutex_args args = {.owner = GetCurrentThreadId()};
      if (ioctl( obj, NTSYNC_IOC_MUTEX_UNLOCK, &args ) < 0)
      {
-@@ -380,6 +553,9 @@ static NTSTATUS linux_release_mutex_obj( int obj, LONG *prev_count )
+@@ -380,6 +569,9 @@ static NTSTATUS linux_release_mutex_obj( int obj, LONG *prev_count )
  
  static NTSTATUS linux_query_mutex_obj( int obj, MUTANT_BASIC_INFORMATION *info )
  {
@@ -257,7 +273,7 @@ index 67ab945cef8..b40bfe4802f 100644
      struct ntsync_mutex_args args = {0};
      if (ioctl( obj, NTSYNC_IOC_MUTEX_READ, &args ) < 0)
      {
-@@ -401,6 +577,9 @@ static NTSTATUS linux_query_mutex_obj( int obj, MUTANT_BASIC_INFORMATION *info )
+@@ -401,24 +593,43 @@ static NTSTATUS linux_query_mutex_obj( int obj, MUTANT_BASIC_INFORMATION *info )
  static NTSTATUS linux_wait_objs( int device, DWORD count, const int *objs, WAIT_TYPE type,
                                   int alert_fd, const LARGE_INTEGER *timeout )
  {
@@ -267,8 +283,13 @@ index 67ab945cef8..b40bfe4802f 100644
      struct ntsync_wait_args args = {0};
      unsigned long request;
      struct timespec now;
-@@ -408,7 +587,7 @@ static NTSTATUS linux_wait_objs( int device, DWORD count, const int *objs, WAIT_
+     int ret;
  
++    /* Timeouts too far away to be expressed in nanoseconds (e.g. the threadpool's absolute
++     * MAXLONGLONG "never") are infinite. Multiplying them by 100 overflowed; the kernel
++     * driver happened to accept the wrapped value, but the userspace ntsync rejects it with
++     * EINVAL, so every such wait failed immediately (STATUS_INVALID_PARAMETER) and the
++     * threadpool wait thread spun at 100% CPU. Compute in 100ns ticks to stay in range. */
      if (!timeout || timeout->QuadPart == TIMEOUT_INFINITE)
      {
 -        args.timeout = ~(__u64)0;
@@ -276,7 +297,32 @@ index 67ab945cef8..b40bfe4802f 100644
      }
      else if (timeout->QuadPart <= 0)
      {
-@@ -636,7 +815,17 @@ static void release_inproc_sync( struct inproc_sync *sync )
+-        clock_gettime( CLOCK_MONOTONIC, &now );
+-        args.timeout = ((ULONGLONG)now.tv_sec * NSECPERSEC) + now.tv_nsec + (-timeout->QuadPart * 100);
++        ULONGLONG ticks = -(ULONGLONG)timeout->QuadPart;
++
++        if (ticks > LLONG_MAX / 200) args.timeout = ~(uint64_t)0;  /* leaves room for "now" */
++        else
++        {
++            clock_gettime( CLOCK_MONOTONIC, &now );
++            args.timeout = ((ULONGLONG)now.tv_sec * NSECPERSEC) + now.tv_nsec + ticks * 100;
++        }
+     }
+     else
+     {
+-        args.timeout = (timeout->QuadPart * 100) - (SECS_1601_TO_1970 * NSECPERSEC);
+-        args.flags |= NTSYNC_WAIT_REALTIME;
++        const ULONGLONG epoch = SECS_1601_TO_1970 * TICKSPERSEC;  /* 1970-01-01 in NT ticks */
++        ULONGLONG ticks = timeout->QuadPart;
++
++        if (ticks <= epoch) args.timeout = 0;  /* before 1970: already expired */
++        else if (ticks - epoch > LLONG_MAX / 100) args.timeout = ~(uint64_t)0;
++        else args.timeout = (ticks - epoch) * 100;
++        if (args.timeout != ~(uint64_t)0) args.flags |= NTSYNC_WAIT_REALTIME;
+     }
+ 
+     args.objs = (uintptr_t)objs;
+@@ -636,7 +847,17 @@ static void release_inproc_sync( struct inproc_sync *sync )
      LONG ref = InterlockedDecrement( &sync->refcount );
  
      assert( ref >= 0 );
@@ -294,7 +340,7 @@ index 67ab945cef8..b40bfe4802f 100644
  }
  
  static struct inproc_sync *get_cached_inproc_sync( HANDLE handle )
-@@ -677,8 +866,25 @@ static NTSTATUS get_server_inproc_sync( HANDLE handle, struct inproc_sync *sync
+@@ -677,8 +898,25 @@ static NTSTATUS get_server_inproc_sync( HANDLE handle, struct inproc_sync *sync
          {
              obj_handle_t fd_handle;
              sync->refcount = 1;
@@ -320,7 +366,7 @@ index 67ab945cef8..b40bfe4802f 100644
              sync->access = reply->access;
              sync->type = reply->type;
              sync->closed = 0;
-@@ -908,6 +1114,15 @@ int get_inproc_alert_fd(void)
+@@ -908,6 +1146,15 @@ int get_inproc_alert_fd(void)
              if (!server_call_unlocked( req ))
              {
                  if (do_fsync()) data->alert_fd = fd = reply->fsync_shm_idx;
@@ -336,7 +382,7 @@ index 67ab945cef8..b40bfe4802f 100644
                  else
                  {
                      data->alert_fd = fd = wine_server_receive_fd( &token );
-@@ -2426,6 +2641,19 @@ NTSTATUS WINAPI NtSignalAndWaitForSingleObject( HANDLE signal, HANDLE wait,
+@@ -2426,6 +2673,19 @@ NTSTATUS WINAPI NtSignalAndWaitForSingleObject( HANDLE signal, HANDLE wait,
   */
  NTSTATUS WINAPI NtYieldExecution(void)
  {
