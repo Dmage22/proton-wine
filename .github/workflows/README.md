@@ -1,12 +1,13 @@
 # Proton Wine Build Workflow
 
-`build-proton.yml` builds Proton Wine 11.0-2 for both x86_64 and aarch64 (ARM64EC)
-architectures. Single SDK 28 target with 16KB page size support (works on
+`build-proton.yml` builds Proton Wine 11.0-2 for aarch64 (ARM64EC), and for x86_64 too
+when a manual run (Run workflow) ticks "Also build x86_64"; pushes and pull requests build
+aarch64 alone. The x86_64 scripts and patches stay in the tree. Single SDK 28 target with 16KB page size support (works on
 Android 9+ and Android 15+); there are no longer separate SDK 28/35 workflows.
 
 ## Jobs
 
-### 1. Build (matrix: x86_64, aarch64)
+### 1. Build (matrix: aarch64, plus x86_64 on a manual run that asks for it)
 1. Environment setup, termuxfs download
 2. Toolchain caching: Android NDK r27d, LLVM MinGW 20250920
 3. ntsync-android (userspace ntsync) checked out as a sibling repo and built via
