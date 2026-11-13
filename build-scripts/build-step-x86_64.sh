@@ -274,8 +274,10 @@ do
 
       # FEX unixlib loader (MemoryWineLoadUnixLibByName) support patches
       "common/include_winternl_h.patch"
-      "common/include_wine_unixlib_h.patch"
-      "common/dlls_wow64_virtual_c.patch"
+      # Valve experimental_11.0 has this unixlib.h change itself
+      # "common/include_wine_unixlib_h.patch"
+      # Valve experimental_11.0 maps the MemoryWineLoadUnixLibByName/Unload classes in wow64 itself
+      # "common/dlls_wow64_virtual_c.patch"
       "common/dlls_ntdll_unix_unix_private_h.patch"
 
       # bionic bug-fixes

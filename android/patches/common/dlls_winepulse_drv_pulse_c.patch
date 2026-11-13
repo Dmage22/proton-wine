@@ -27,16 +27,18 @@ index 85062ea..5380f3c 100644
      pa_mainloop_free(pulse_ml);
      pulse_unlock();
      return STATUS_SUCCESS;
-@@ -1732,6 +1738,17 @@ static void pulse_add_stream_to_period(struct pulse_stream *stream)
-     period->timer_last_time = pa_rtclock_now();
-     period->time_event = pa_context_rttime_new(pulse_ctx, period->timer_last_time + period->period,
+@@ -1912,6 +1918,19 @@ static void pulse_add_stream_to_period(struct pulse_stream *stream)
+     period->timer_last_time = pa_rtclock_now() + period->period;
+     period->time_event = pa_context_rttime_new(pulse_ctx, period->timer_last_time,
              pa_streams_timer_cb, period);
 +
 +    // GN Patch
 +    if (!period->time_event)
 +    {
 +        WARN("Failed to create timer event, timer callbacks disabled (box64 < 0.4.0?)\n");
++        list_remove(&stream->period_entry);
 +        list_remove(&period->entry);
++        free(period->device);
 +        free(period);
 +        stream->period = NULL;
 +        return;
@@ -44,4 +46,4 @@ index 85062ea..5380f3c 100644
 +
      api = pa_mainloop_get_api(pulse_ml);
      api->time_set_destroy(period->time_event, pa_streams_timer_cb_destroy);
-     TRACE("Created period %p.\n", period);
+     TRACE("Created period %p, %s, %lld.\n", period, debugstr_a(period->device), (long long)period->period);
