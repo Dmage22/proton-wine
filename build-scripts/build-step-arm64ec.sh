@@ -322,7 +322,9 @@ do
 
       # ignore attempts to set reserved CPSR bits, so a host-only bit (SSBS)
       # never reaches user context (Wine MR !12262, Wine bug 60405)
-      "arm64ec/dlls_ntdll_cpsr_reserved_bits.patch"
+      # parked on main-dm: written for GameNative's signal_arm64.c, which lacks the Valve
+      # ARM64EC fixes this branch carries, so its save_context/restore_context hunks miss
+      # "arm64ec/dlls_ntdll_cpsr_reserved_bits.patch"
 
       # 1. Thread Suspension Patches
       "test-bylaws/dlls_ntdll_unix_debug_c.patch"
@@ -336,7 +338,8 @@ do
       "test-bylaws/dlls_ntdll_unix_process_c.patch"
       "common/dlls_win32u_vulkan_c_other_process_readback.patch"
       "arm64ec/dlls_ntdll_arm64_copyable_syscall_thunks.patch"
-      "arm64ec/dlls_ntdll_unix_signal_arm64_c_zero_debug_registers.patch"
+      # main-dm has this fix in dlls/ntdll/unix/signal_arm64.c itself (cbda669e45)
+      # "arm64ec/dlls_ntdll_unix_signal_arm64_c_zero_debug_registers.patch"
       "common/dlls_ntdll_unix_env_c_nls_fallback.patch"
       "arm64ec/dlls_ntdll_signal_arm64_c_no_unwind_progress.patch"
     )
