@@ -13,13 +13,20 @@ on:
   pull_request:
     branches: [ main-dm ]
   workflow_dispatch:
+    inputs:
+      build_x86_64:
+        description: Also build x86_64 (Box64) packages
+        type: boolean
+        default: false
 
+# x86_64 stays in the tree (scripts, patches) but is built only when a manual run asks for it;
+# pushes and pull requests build aarch64 (ARM64EC) alone.
 jobs:
   build:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        arch: [x86_64, aarch64]
+        arch: ${{ fromJSON(inputs.build_x86_64 && '["x86_64", "aarch64"]' || '["aarch64"]') }}
       fail-fast: false
 
     steps:
@@ -355,7 +362,7 @@ jobs:
             Built from commit: ${{ github.sha }}
 
             ### Architectures
-            - x86_64 (Intel/AMD 64-bit)
+            ${{ inputs.build_x86_64 && '- x86_64 (Intel/AMD 64-bit)' || '' }}
             - arm64ec (ARM64EC)
 
             Single SDK 28 build with 16KB page size support (works on Android 9+ and Android 15+).
@@ -386,11 +393,11 @@ jobs:
 
             ### WCP Files
             **Proton Type:**
-            - `proton-11.0-2-x86_64.wcp` - For GameNative
+            ${{ inputs.build_x86_64 && '- `proton-11.0-2-x86_64.wcp` - For GameNative' || '' }}
             - `proton-11.0-2-arm64ec.wcp` - For GameNative
 
             **Wine Type:**
-            - `proton-wine-11.0-2-x86_64.wcp.xz` - For Winlator for CMOD & Ludashi
+            ${{ inputs.build_x86_64 && '- `proton-wine-11.0-2-x86_64.wcp.xz` - For Winlator for CMOD & Ludashi' || '' }}
             - `proton-wine-11.0-2-arm64ec.wcp.xz` - For Winlator for CMOD & Ludashi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
