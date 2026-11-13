@@ -67,13 +67,10 @@ WINE_DEFAULT_DEBUG_CHANNEL(seh);
 
 struct arm64_thread_data
 {
-    BOOL  suspend_pending;
-    void *syscall_dispatcher;  /* 02f8 read by the syscall thunks, see __ASM_SYSCALL_FUNC */
+    BOOL suspend_pending;
 };
 
 C_ASSERT( sizeof(struct arm64_thread_data) <= sizeof(((struct ntdll_thread_data *)0)->cpu_data) );
-C_ASSERT( offsetof( TEB, GdiTebBatch ) + offsetof( struct ntdll_thread_data, cpu_data ) +
-          offsetof( struct arm64_thread_data, syscall_dispatcher ) == 0x2f8 );
 
 static inline struct arm64_thread_data *arm64_thread_data(void)
 {
@@ -1534,16 +1531,6 @@ void signal_init_threading(void)
  */
 NTSTATUS signal_alloc_thread( TEB *teb )
 {
-    struct ntdll_thread_data *thread_data = (struct ntdll_thread_data *)&teb->GdiTebBatch;
-
-    /* the syscall thunks load the dispatcher from the TEB rather than PC-relative, so that
-     * copies of them made by applications (e.g. World of Warcraft's protector, which copies
-     * the thunks like Windows' position-independent "svc #n; ret" stubs) still work.
-     * Credit: this "ARM64 copied-syscall fix" (dispatcher at TEB+0x2f8) comes from the
-     * WoW Forever RP6 community bundle's Proton 11 ARM64EC build (based on
-     * The412Banner/proton-wine), distributed in jaredgei/wow-forever-android and used by
-     * wyattabuntjer/AYN-Thor-WoW-Launcher; reimplemented here from their binary. */
-    ((struct arm64_thread_data *)thread_data->cpu_data)->syscall_dispatcher = __wine_syscall_dispatcher;
     return STATUS_SUCCESS;
 }
 
