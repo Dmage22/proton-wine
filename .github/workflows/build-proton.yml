@@ -230,9 +230,9 @@ jobs:
           cat > $GITHUB_WORKSPACE/profile.json << EOF
           {
             "type": "Proton",
-            "versionName": "${PROTON_VERSION}-${ARCH_NAME}-125",
+            "versionName": "${PROTON_VERSION}-${ARCH_NAME}-126",
             "versionCode": 1,
-            "description": "Proton 11.0-2 ${ARCH_NAME} build 125 (Dmage22) — GameNative proton_11.0-2 e33fbce (Sleep(0) storm throttle and socket would-block fast path #119, XComposite #125) + Valve ARM64EC fixes (2026-09-05), RtlWaitOnAddress lost-wakeup fix, SIGQUIT blocked, RtlpUnWaitCriticalSection hardening, MapleStory launch fixes (GE: CharPrevA NULL, SPI sticky/filter keys), reg/powershell/wmic built ARM64X, per-prefix SMBIOS UUID, Battle.net GPU drawing (Vulkan readback of other-process surfaces), World of Warcraft native ARM64 (copyable syscall thunks, zeroed debug registers, NLS fallback), ARM64 SEH no-progress check, ntsync far-future wait timeout fix, duplicate objects in ntsync wait-any (threadpool spin), wbemprox: more than one pending async call (MapleStory lobby), crypt32: no false Unsupported decoder FIXME. SDK 28 + 16KB pages.",
+            "description": "Proton 11.0-2 ${ARCH_NAME} build 126 (Dmage22) — GameNative proton_11.0-2 e33fbce (Sleep(0) storm throttle and socket would-block fast path #119, XComposite #125) + Valve ARM64EC fixes (2026-09-05), RtlWaitOnAddress lost-wakeup fix, SIGQUIT blocked, RtlpUnWaitCriticalSection hardening, MapleStory launch fixes (GE: CharPrevA NULL, SPI sticky/filter keys), reg/powershell/wmic built ARM64X, per-prefix SMBIOS UUID, Battle.net GPU drawing (Vulkan readback of other-process surfaces), World of Warcraft native ARM64 (copyable syscall thunks, zeroed debug registers, NLS fallback), ARM64 SEH no-progress check, ntsync far-future wait timeout fix, duplicate objects in ntsync wait-any (threadpool spin), wbemprox: more than one pending async call (MapleStory lobby), crypt32: no false Unsupported decoder FIXME, IP address change notifications without rtnetlink, secur32 ChaCha20-Poly1305 mapping, no winebth root device. SDK 28 + 16KB pages.",
             "files": [],
             "wine": {
               "binPath": "bin",
@@ -246,9 +246,9 @@ jobs:
           cat > $GITHUB_WORKSPACE/profile-wine.json << EOF
           {
             "type": "Wine",
-            "versionName": "${PROTON_VERSION}-${ARCH_NAME}-125",
+            "versionName": "${PROTON_VERSION}-${ARCH_NAME}-126",
             "versionCode": 0,
-            "description": "Proton 11.0-2 ${ARCH_NAME} build 125 (Dmage22) — GameNative proton_11.0-2 e33fbce (Sleep(0) storm throttle and socket would-block fast path #119, XComposite #125) + Valve ARM64EC fixes (2026-09-05), RtlWaitOnAddress lost-wakeup fix, SIGQUIT blocked, RtlpUnWaitCriticalSection hardening, MapleStory launch fixes (GE: CharPrevA NULL, SPI sticky/filter keys), reg/powershell/wmic built ARM64X, per-prefix SMBIOS UUID, Battle.net GPU drawing (Vulkan readback of other-process surfaces), World of Warcraft native ARM64 (copyable syscall thunks, zeroed debug registers, NLS fallback), ARM64 SEH no-progress check, ntsync far-future wait timeout fix, duplicate objects in ntsync wait-any (threadpool spin), wbemprox: more than one pending async call (MapleStory lobby), crypt32: no false Unsupported decoder FIXME. SDK 28 + 16KB pages.",
+            "description": "Proton 11.0-2 ${ARCH_NAME} build 126 (Dmage22) — GameNative proton_11.0-2 e33fbce (Sleep(0) storm throttle and socket would-block fast path #119, XComposite #125) + Valve ARM64EC fixes (2026-09-05), RtlWaitOnAddress lost-wakeup fix, SIGQUIT blocked, RtlpUnWaitCriticalSection hardening, MapleStory launch fixes (GE: CharPrevA NULL, SPI sticky/filter keys), reg/powershell/wmic built ARM64X, per-prefix SMBIOS UUID, Battle.net GPU drawing (Vulkan readback of other-process surfaces), World of Warcraft native ARM64 (copyable syscall thunks, zeroed debug registers, NLS fallback), ARM64 SEH no-progress check, ntsync far-future wait timeout fix, duplicate objects in ntsync wait-any (threadpool spin), wbemprox: more than one pending async call (MapleStory lobby), crypt32: no false Unsupported decoder FIXME, IP address change notifications without rtnetlink, secur32 ChaCha20-Poly1305 mapping, no winebth root device. SDK 28 + 16KB pages.",
             "files": [],
             "wine": {
               "binPath": "bin",
@@ -280,8 +280,8 @@ jobs:
           if [ -n "$PR_NUMBER" ]; then
             PR_PART="-$PR_NUMBER"
           fi
-          PROTON_WCP="proton-$PROTON_VERSION-$ARCH_NAME-125$PR_PART.wcp"
-          WINE_WCP="proton-wine-$PROTON_VERSION-$ARCH_NAME-125$PR_PART.wcp.xz"
+          PROTON_WCP="proton-$PROTON_VERSION-$ARCH_NAME-126$PR_PART.wcp"
+          WINE_WCP="proton-wine-$PROTON_VERSION-$ARCH_NAME-126$PR_PART.wcp.xz"
           echo "PROTON_WCP=$PROTON_WCP" >> $GITHUB_ENV
           echo "WINE_WCP=$WINE_WCP" >> $GITHUB_ENV
 
@@ -340,7 +340,7 @@ jobs:
         id: generate_tag
         run: |
           DATE=$(date +%Y%m%d)
-          TAG_NAME="proton-11.0-2-${DATE}-125"
+          TAG_NAME="proton-11.0-2-${DATE}-126"
           echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
           echo "Generated tag: ${TAG_NAME}"
 
