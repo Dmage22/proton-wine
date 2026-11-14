@@ -1,0 +1,30 @@
+diff --git a/dlls/secur32/schannel_gnutls.c b/dlls/secur32/schannel_gnutls.c
+index 49e5b2c..503232a 100644
+--- a/dlls/secur32/schannel_gnutls.c
++++ b/dlls/secur32/schannel_gnutls.c
+@@ -140,6 +140,7 @@ MAKE_FUNCPTR(gnutls_x509_privkey_deinit);
+ #if GNUTLS_VERSION_MAJOR < 3 || (GNUTLS_VERSION_MAJOR == 3 && GNUTLS_VERSION_MINOR < 4)
+ #define GNUTLS_CIPHER_AES_128_CCM 19
+ #define GNUTLS_CIPHER_AES_256_CCM 20
++#define GNUTLS_CIPHER_CHACHA20_POLY1305 23
+ #endif
+ 
+ #if GNUTLS_VERSION_MAJOR < 3 || (GNUTLS_VERSION_MAJOR == 3 && GNUTLS_VERSION_MINOR < 5)
+@@ -737,6 +738,9 @@ static ALG_ID get_cipher_algid(gnutls_cipher_algorithm_t cipher)
+     case GNUTLS_CIPHER_AES_256_GCM:
+     case GNUTLS_CIPHER_AES_256_CBC: return CALG_AES_256;
+     case GNUTLS_CIPHER_RC2_40_CBC: return CALG_RC2;
++    case GNUTLS_CIPHER_CHACHA20_POLY1305:
++        /* wincrypt has no CALG_ value for ChaCha20; its strength (256) still goes in dwCipherStrength */
++        return 0;
+     default:
+         FIXME("unknown algorithm %d\n", cipher);
+         return 0;
+@@ -762,6 +766,7 @@ static ALG_ID get_mac_algid(gnutls_mac_algorithm_t mac, gnutls_cipher_algorithm_
+         {
+         case GNUTLS_CIPHER_AES_128_GCM: return CALG_SHA_256;
+         case GNUTLS_CIPHER_AES_256_GCM: return CALG_SHA_384;
++        case GNUTLS_CIPHER_CHACHA20_POLY1305: return CALG_SHA_256; /* RFC 7905 */
+         default:
+             break;
+         }

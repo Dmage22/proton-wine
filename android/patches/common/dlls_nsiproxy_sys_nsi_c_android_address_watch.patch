@@ -1,0 +1,119 @@
+diff --git a/dlls/nsiproxy.sys/nsi.c b/dlls/nsiproxy.sys/nsi.c
+index 9e88a67..09c88f9 100644
+--- a/dlls/nsiproxy.sys/nsi.c
++++ b/dlls/nsiproxy.sys/nsi.c
+@@ -27,6 +27,10 @@
+ #include <errno.h>
+ #include <unistd.h>
+ #include <sys/socket.h>
++#ifdef __ANDROID__
++#include <ifaddrs.h>
++#include <netinet/in.h>
++#endif
+ #include <limits.h>
+ #ifdef HAVE_LINUX_RTNETLINK_H
+ #include <linux/rtnetlink.h>
+@@ -187,6 +191,72 @@ static NTSTATUS add_notification( const NPI_MODULEID *module, UINT32 table )
+ }
+ 
+ #if defined(HAVE_LINUX_RTNETLINK_H)
++#ifdef __ANDROID__
++/* Android does not let apps join the rtnetlink address groups (bind() fails with EACCES), so
++ * nothing would ever report an address change. Read the address list with getifaddrs() every
++ * two seconds instead and queue the notifications the netlink path sends. */
++static BOOL watch_addresses;
++
++static BOOL hash_addresses( ULONGLONG *hash4, ULONGLONG *hash6 )
++{
++    struct ifaddrs *addrs, *ifa;
++
++    if (getifaddrs( &addrs )) return FALSE;
++    *hash4 = *hash6 = 0;
++    for (ifa = addrs; ifa; ifa = ifa->ifa_next)
++    {
++        ULONGLONG hash = 14695981039346656037ull;
++        const unsigned char *bytes;
++        unsigned int i, len;
++
++        if (!ifa->ifa_addr) continue;
++        if (ifa->ifa_addr->sa_family == AF_INET)
++        {
++            bytes = (const unsigned char *)&((const struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
++            len = 4;
++        }
++        else if (ifa->ifa_addr->sa_family == AF_INET6)
++        {
++            bytes = (const unsigned char *)&((const struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
++            len = 16;
++        }
++        else continue;
++
++        for (i = 0; i < len; i++) hash = (hash ^ bytes[i]) * 1099511628211ull;
++        for (i = 0; ifa->ifa_name && ifa->ifa_name[i]; i++) hash = (hash ^ (unsigned char)ifa->ifa_name[i]) * 1099511628211ull;
++        /* a sum, so the order getifaddrs() lists the addresses in does not matter */
++        if (ifa->ifa_addr->sa_family == AF_INET) *hash4 += hash;
++        else *hash6 += hash;
++    }
++    freeifaddrs( addrs );
++    return TRUE;
++}
++
++static NTSTATUS poll_address_changes(void)
++{
++    static ULONGLONG last4, last6;
++    static BOOL have_last;
++    ULONGLONG hash4, hash6;
++    NTSTATUS status;
++
++    if (!have_last) have_last = hash_addresses( &last4, &last6 );
++    while (!queued_notification_count)
++    {
++        sleep( 2 );
++        if (!hash_addresses( &hash4, &hash6 )) continue;
++        if (have_last)
++        {
++            if (hash4 != last4 && (status = add_notification( &NPI_MS_IPV4_MODULEID, NSI_IP_UNICAST_TABLE ))) return status;
++            if (hash6 != last6 && (status = add_notification( &NPI_MS_IPV6_MODULEID, NSI_IP_UNICAST_TABLE ))) return status;
++        }
++        last4 = hash4;
++        last6 = hash6;
++        have_last = TRUE;
++    }
++    return STATUS_SUCCESS;
++}
++#endif
++
+ static NTSTATUS poll_events(void)
+ {
+     static int netlink_fd = -1;
+@@ -195,6 +265,9 @@ static NTSTATUS poll_events(void)
+     NTSTATUS status;
+     int len;
+ 
++#ifdef __ANDROID__
++    if (watch_addresses) return poll_address_changes();
++#endif
+     if (netlink_fd == -1)
+     {
+         struct sockaddr_nl addr;
+@@ -210,9 +283,19 @@ static NTSTATUS poll_events(void)
+         addr.nl_groups = RTMGRP_IPV4_IFADDR | RTMGRP_IPV6_IFADDR;
+         if (bind( netlink_fd, (struct sockaddr *)&addr, sizeof(addr) ) == -1)
+         {
++            int err = errno;
++
+             close( netlink_fd );
+             netlink_fd = -1;
+-            ERR( "bind failed, errno %d.\n", errno );
++#ifdef __ANDROID__
++            if (err == EACCES)
++            {
++                TRACE( "rtnetlink address groups not allowed, watching getifaddrs() instead.\n" );
++                watch_addresses = TRUE;
++                return poll_address_changes();
++            }
++#endif
++            ERR( "bind failed, errno %d.\n", err );
+             return STATUS_NOT_IMPLEMENTED;
+         }
+     }

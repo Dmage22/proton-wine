@@ -1,0 +1,13 @@
+diff --git a/dlls/ntdll/loader.c b/dlls/ntdll/loader.c
+index aabb584..9851f8b 100644
+--- a/dlls/ntdll/loader.c
++++ b/dlls/ntdll/loader.c
+@@ -1160,7 +1160,7 @@ static int use_lsteamclient(void)
+ 
+     use = !get_env( L"PROTON_DISABLE_LSTEAMCLIENT", env, sizeof(env) ) || *env == '0';
+     if (!use)
+-        ERR("lsteamclient disabled.\n");
++        WARN("lsteamclient disabled.\n"); /* a chosen setting (PROTON_DISABLE_LSTEAMCLIENT), not a failure */
+     return use;
+ }
+ 

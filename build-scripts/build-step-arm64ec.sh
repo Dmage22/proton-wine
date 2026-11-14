@@ -344,6 +344,16 @@ do
       # "arm64ec/dlls_ntdll_unix_signal_arm64_c_zero_debug_registers.patch"
       "common/dlls_ntdll_unix_env_c_nls_fallback.patch"
       "arm64ec/dlls_ntdll_signal_arm64_c_no_unwind_progress.patch"
+      # Android: watch the address list with getifaddrs() when rtnetlink groups are refused (EACCES),
+      # so IP address change notifications still fire
+      "common/dlls_nsiproxy_sys_nsi_c_android_address_watch.patch"
+      # secur32: map the ChaCha20-Poly1305 cipher suites GnuTLS negotiates
+      "common/dlls_secur32_schannel_gnutls_c_chacha20.patch"
+      # no winebth root device: it needs BlueZ over D-Bus and failed to start at every boot
+      "common/programs_wineboot_wineboot_c_no_winebth.patch"
+      # PROTON_DISABLE_LSTEAMCLIENT and the missing libkrb5 are reported as warnings, not errors
+      "common/dlls_ntdll_loader_c_lsteamclient_warn.patch"
+      "common/dlls_kerberos_krb5_ap_c_warn.patch"
     )
 
     for patch in "${PATCHES[@]}"; do
