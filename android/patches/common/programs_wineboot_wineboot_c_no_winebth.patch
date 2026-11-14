@@ -1,0 +1,13 @@
+diff --git a/programs/wineboot/wineboot.c b/programs/wineboot/wineboot.c
+index fdf5a9a..0ddfa97 100644
+--- a/programs/wineboot/wineboot.c
++++ b/programs/wineboot/wineboot.c
+@@ -1546,7 +1546,7 @@ static void install_root_pnp_devices(void)
+     }
+     root_devices[] =
+     {
+-        {"root\\wine\\winebth", "root\\winebth\0", "C:\\windows\\inf\\winebth.inf"},
++        /* no winebth on Android: it needs BlueZ over D-Bus, so its driver failed to start at every boot */
+         {"root\\wine\\winebus", "root\\winebus\0", "C:\\windows\\inf\\winebus.inf"},
+         {"root\\wine\\wineusb", "root\\wineusb\0", "C:\\windows\\inf\\wineusb.inf"},
+     };
